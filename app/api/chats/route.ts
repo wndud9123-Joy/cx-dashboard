@@ -11,95 +11,78 @@ interface ChatCount {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const period = searchParams.get("period") || "daily"; // daily, weekly, monthly
+  const period = searchParams.get("period") || "daily";
   const days = period === "monthly" ? 365 : period === "weekly" ? 90 : 30;
+  const sinceTs = Date.now() - days * 24 * 60 * 60 * 1000;
 
   try {
-    // Fetch user chats from Channel Talk API
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-
     let allChats: any[] = [];
-    let after: string | null = null;
-    let hasMore = true;
 
-    while (hasMore) {
-      const params = new URLSearchParams({
-        state: "closed",
-        sortOrder: "desc",
-        limit: "50",
-        since: since.getTime().toString(),
-      });
-      if (after) params.set("after", after);
+    for (const state of ["closed", "opened", "snoozed"]) {
+      let next: string | null = null;
+      let hasMore = true;
 
-      const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
-        headers: {
-          "x-access-key": API_KEY,
-          "x-access-secret": API_SECRET,
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Channel Talk API error:", res.status, errorText);
-        return NextResponse.json(
-          { error: `Channel Talk API error: ${res.status}` },
-          { status: res.status }
-        );
-      }
-
-      const data = await res.json();
-      const chats = data.userChats || [];
-      allChats = allChats.concat(chats);
-
-      if (chats.length < 50) {
-        hasMore = false;
-      } else {
-        after = chats[chats.length - 1]?.id;
-      }
-    }
-
-    // Also fetch open/snoozed chats
-    for (const state of ["opened", "snoozed"]) {
-      let stateAfter: string | null = null;
-      let stateHasMore = true;
-
-      while (stateHasMore) {
+      while (hasMore) {
         const params = new URLSearchParams({
           state,
           sortOrder: "desc",
           limit: "50",
-          since: since.getTime().toString(),
         });
-        if (stateAfter) params.set("after", stateAfter);
+        if (next) params.set("next", next);
 
         const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
           headers: {
             "x-access-key": API_KEY,
-          "x-access-secret": API_SECRET,
+            "x-access-secret": API_SECRET,
             "Content-Type": "application/json",
           },
           cache: "no-store",
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          const chats = data.userChats || [];
-          allChats = allChats.concat(chats);
-          if (chats.length < 50) {
-            stateHasMore = false;
-          } else {
-            stateAfter = chats[chats.length - 1]?.id;
+        if (!res.ok) {
+          if (state === "closed") {
+            const errorText = await res.text();
+            console.error("Channel Talk API error:", res.status, errorText);
+            return NextResponse.json(
+              { error: `Channel Talk API error: ${res.status}` },
+              { status: res.status }
+            );
           }
+          hasMore = false;
+          continue;
+        }
+
+        const data = await res.json();
+        const chats = data.userChats || [];
+        const nextCursor = data.next || null;
+
+        // Filter chats within our time range
+        let reachedEnd = false;
+        for (const chat of chats) {
+          const ts = chat.createdAt || chat.openedAt || 0;
+          if (ts >= sinceTs) {
+            allChats.push(chat);
+          } else {
+            reachedEnd = true;
+          }
+        }
+
+        if (reachedEnd || chats.length < 50 || !nextCursor) {
+          hasMore = false;
         } else {
-          stateHasMore = false;
+          next = nextCursor;
         }
       }
     }
 
-    // Group by date
+    // Deduplicate by chat id
+    const seen = new Set<string>();
+    allChats = allChats.filter((chat) => {
+      if (seen.has(chat.id)) return false;
+      seen.add(chat.id);
+      return true;
+    });
+
     const counts = groupByPeriod(allChats, period);
 
     return NextResponse.json({
@@ -129,7 +112,6 @@ function groupByPeriod(chats: any[], period: string): ChatCount[] {
     if (period === "monthly") {
       key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     } else if (period === "weekly") {
-      // Get Monday of the week
       const d = new Date(date);
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -142,10 +124,7 @@ function groupByPeriod(chats: any[], period: string): ChatCount[] {
     map.set(key, (map.get(key) || 0) + 1);
   }
 
-  // Sort by date and fill gaps
-  const sorted = Array.from(map.entries())
+  return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, count]) => ({ date, count }));
-
-  return sorted;
 }
