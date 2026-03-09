@@ -30,16 +30,26 @@ async function fetchChatsByState(
     });
     if (next) params.set("next", next);
 
-    const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
-      headers: {
-        "x-access-key": API_KEY,
-        "x-access-secret": API_SECRET,
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    });
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(`${BASE_URL}/user-chats?${params}`, {
+        headers: {
+          "x-access-key": API_KEY,
+          "x-access-secret": API_SECRET,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
 
-    if (!res.ok) break;
+      if (res.status === 429) {
+        const retryAfter = parseInt(res.headers.get("retry-after") || "2", 10);
+        await new Promise((r) => setTimeout(r, retryAfter * 1000));
+        continue;
+      }
+      break;
+    }
+
+    if (!res || !res.ok) break;
 
     const data = await res.json();
     const batch = data.userChats || [];
@@ -58,6 +68,8 @@ async function fetchChatsByState(
     pages++;
     if (reachedEnd || batch.length < 50 || !nextCursor) break;
     next = nextCursor;
+    // Rate limit 방지: 요청 사이 200ms 대기
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   return chats;
