@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const API_KEY = process.env.CHANNEL_TALK_API_KEY!;
+const API_SECRET = process.env.CHANNEL_TALK_API_SECRET!;
 const BASE_URL = "https://api.channel.io/open/v5";
 
 interface ChatCount {
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
       const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
         headers: {
           "x-access-key": API_KEY,
+          "x-access-secret": API_SECRET,
           "Content-Type": "application/json",
         },
         cache: "no-store",
@@ -76,6 +78,7 @@ export async function GET(request: NextRequest) {
         const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
           headers: {
             "x-access-key": API_KEY,
+          "x-access-secret": API_SECRET,
             "Content-Type": "application/json",
           },
           cache: "no-store",
