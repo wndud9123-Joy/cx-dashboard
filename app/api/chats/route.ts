@@ -9,73 +9,84 @@ interface ChatCount {
   count: number;
 }
 
+// In-memory cache (5 min TTL)
+const cache = new Map<string, { data: any; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function fetchChatsByState(
+  state: string,
+  sinceTs: number,
+  maxPages: number = 20
+): Promise<any[]> {
+  const chats: any[] = [];
+  let next: string | null = null;
+  let pages = 0;
+
+  while (pages < maxPages) {
+    const params = new URLSearchParams({
+      state,
+      sortOrder: "desc",
+      limit: "50",
+    });
+    if (next) params.set("next", next);
+
+    const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
+      headers: {
+        "x-access-key": API_KEY,
+        "x-access-secret": API_SECRET,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) break;
+
+    const data = await res.json();
+    const batch = data.userChats || [];
+    const nextCursor = data.next || null;
+
+    let reachedEnd = false;
+    for (const chat of batch) {
+      const ts = chat.createdAt || chat.openedAt || 0;
+      if (ts >= sinceTs) {
+        chats.push(chat);
+      } else {
+        reachedEnd = true;
+      }
+    }
+
+    pages++;
+    if (reachedEnd || batch.length < 50 || !nextCursor) break;
+    next = nextCursor;
+  }
+
+  return chats;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const period = searchParams.get("period") || "daily";
   const days = period === "monthly" ? 365 : period === "weekly" ? 90 : 30;
   const sinceTs = Date.now() - days * 24 * 60 * 60 * 1000;
 
+  // Check cache
+  const cacheKey = `${period}-${Math.floor(sinceTs / CACHE_TTL)}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return NextResponse.json(cached.data);
+  }
+
   try {
-    let allChats: any[] = [];
+    // Fetch all states in parallel
+    const [closed, opened, snoozed] = await Promise.all([
+      fetchChatsByState("closed", sinceTs),
+      fetchChatsByState("opened", sinceTs, 5),
+      fetchChatsByState("snoozed", sinceTs, 5),
+    ]);
 
-    for (const state of ["closed", "opened", "snoozed"]) {
-      let next: string | null = null;
-      let hasMore = true;
+    let allChats = [...closed, ...opened, ...snoozed];
 
-      while (hasMore) {
-        const params = new URLSearchParams({
-          state,
-          sortOrder: "desc",
-          limit: "50",
-        });
-        if (next) params.set("next", next);
-
-        const res = await fetch(`${BASE_URL}/user-chats?${params}`, {
-          headers: {
-            "x-access-key": API_KEY,
-            "x-access-secret": API_SECRET,
-            "Content-Type": "application/json",
-          },
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          if (state === "closed") {
-            const errorText = await res.text();
-            console.error("Channel Talk API error:", res.status, errorText);
-            return NextResponse.json(
-              { error: `Channel Talk API error: ${res.status}` },
-              { status: res.status }
-            );
-          }
-          hasMore = false;
-          continue;
-        }
-
-        const data = await res.json();
-        const chats = data.userChats || [];
-        const nextCursor = data.next || null;
-
-        // Filter chats within our time range
-        let reachedEnd = false;
-        for (const chat of chats) {
-          const ts = chat.createdAt || chat.openedAt || 0;
-          if (ts >= sinceTs) {
-            allChats.push(chat);
-          } else {
-            reachedEnd = true;
-          }
-        }
-
-        if (reachedEnd || chats.length < 50 || !nextCursor) {
-          hasMore = false;
-        } else {
-          next = nextCursor;
-        }
-      }
-    }
-
-    // Deduplicate by chat id
+    // Deduplicate
     const seen = new Set<string>();
     allChats = allChats.filter((chat) => {
       if (seen.has(chat.id)) return false;
@@ -84,12 +95,12 @@ export async function GET(request: NextRequest) {
     });
 
     const counts = groupByPeriod(allChats, period);
+    const result = { period, total: allChats.length, data: counts };
 
-    return NextResponse.json({
-      period,
-      total: allChats.length,
-      data: counts,
-    });
+    // Cache result
+    cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
+
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("Error fetching chats:", error);
     return NextResponse.json(
