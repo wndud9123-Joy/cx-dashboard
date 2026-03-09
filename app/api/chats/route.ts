@@ -11,7 +11,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 async function fetchChatsByState(
   state: string,
   sinceTs: number,
-  maxPages: number = 20
+  maxPages: number = 60
 ): Promise<any[]> {
   const chats: any[] = [];
   let next: string | null = null;
@@ -37,7 +37,7 @@ async function fetchChatsByState(
       });
 
       if (res.status === 429) {
-        const retryAfter = parseInt(res.headers.get("retry-after") || "2", 10);
+        const retryAfter = parseInt(res.headers.get("retry-after") || "3", 10);
         await new Promise((r) => setTimeout(r, retryAfter * 1000));
         continue;
       }
@@ -63,63 +63,52 @@ async function fetchChatsByState(
     pages++;
     if (reachedEnd || batch.length < 50 || !nextCursor) break;
     next = nextCursor;
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   return chats;
 }
 
-// Get Wednesday-based week start (previous Wednesday)
+// Week starts on Wednesday, ends on Tuesday
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   const day = d.getDay(); // 0=Sun, 3=Wed
-  const diff = day >= 3 ? day - 3 : day + 4; // days since last Wednesday
+  const diff = day >= 3 ? day - 3 : day + 4;
   d.setDate(d.getDate() - diff);
   return d;
 }
 
 function getWeekEnd(weekStart: Date): Date {
   const d = new Date(weekStart);
-  d.setDate(d.getDate() + 7);
-  d.setMilliseconds(-1);
+  d.setDate(d.getDate() + 6);
+  d.setHours(23, 59, 59, 999);
   return d;
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const mode = searchParams.get("mode") || "weekly"; // weekly, range, compare
-  const from = searchParams.get("from"); // YYYY-MM-DD
-  const to = searchParams.get("to"); // YYYY-MM-DD
-
-  let sinceTs: number;
-  let untilTs: number = Date.now();
-  let compareFrom: number | null = null;
-  let compareUntil: number | null = null;
+  const mode = searchParams.get("mode") || "compare";
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
 
   const now = new Date();
+  const thisWeekStart = getWeekStart(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
-  if (mode === "compare") {
-    // This week (Wed~Tue) vs Last week (Wed~Tue)
-    const thisWeekStart = getWeekStart(now);
-    const lastWeekStart = new Date(thisWeekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  let sinceTs: number;
+  let untilTs: number;
 
-    sinceTs = lastWeekStart.getTime();
-    untilTs = getWeekEnd(thisWeekStart).getTime();
-    compareFrom = lastWeekStart.getTime();
-    compareUntil = thisWeekStart.getTime() - 1;
-  } else if (mode === "range" && from && to) {
+  if (mode === "range" && from && to) {
     sinceTs = new Date(from).getTime();
     untilTs = new Date(to).getTime() + 24 * 60 * 60 * 1000 - 1;
   } else {
-    // Default: this week (Wed~Tue)
-    const weekStart = getWeekStart(now);
-    sinceTs = weekStart.getTime();
-    untilTs = getWeekEnd(weekStart).getTime();
+    // Default: last Wed ~ this Tue (2 weeks for comparison)
+    sinceTs = lastWeekStart.getTime();
+    untilTs = getWeekEnd(thisWeekStart).getTime();
   }
 
-  // Cache key
   const cacheKey = `${mode}-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
@@ -127,10 +116,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Fetch all states in parallel
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs),
-      fetchChatsByState("opened", sinceTs, 10),
-      fetchChatsByState("snoozed", sinceTs, 5),
+      fetchChatsByState("closed", sinceTs, 60),
+      fetchChatsByState("opened", sinceTs, 20),
+      fetchChatsByState("snoozed", sinceTs, 10),
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
@@ -143,24 +133,38 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
-    // Filter by untilTs
+    // Filter by time range
     allChats = allChats.filter((chat) => {
       const ts = chat.createdAt || chat.openedAt || 0;
       return ts >= sinceTs && ts <= untilTs;
     });
 
-    // AI vs Human classification
-    // No assigneeId or empty managerIds = AI bot
-    const aiChats = allChats.filter(
+    // Split into this week and last week
+    const thisWeekEnd = getWeekEnd(thisWeekStart);
+    const thisWeekChats = allChats.filter((c) => {
+      const ts = c.createdAt || c.openedAt || 0;
+      return ts >= thisWeekStart.getTime() && ts <= thisWeekEnd.getTime();
+    });
+    const lastWeekEnd = getWeekEnd(lastWeekStart);
+    const lastWeekChats = allChats.filter((c) => {
+      const ts = c.createdAt || c.openedAt || 0;
+      return ts >= lastWeekStart.getTime() && ts <= lastWeekEnd.getTime();
+    });
+
+    // Use appropriate chat set based on mode
+    const displayChats = mode === "range" ? allChats : thisWeekChats;
+
+    // AI vs Human (no assigneeId AND no managerIds = AI bot)
+    const aiChats = displayChats.filter(
       (chat) => !chat.assigneeId && (!chat.managerIds || chat.managerIds.length === 0)
     );
-    const humanChats = allChats.filter(
+    const humanChats = displayChats.filter(
       (chat) => chat.assigneeId || (chat.managerIds && chat.managerIds.length > 0)
     );
 
-    // Tag breakdown
+    // Tag breakdown (multi-tag: count each tag separately)
     const tagMap = new Map<string, number>();
-    for (const chat of allChats) {
+    for (const chat of displayChats) {
       const tags = chat.tags || [];
       if (tags.length === 0) {
         tagMap.set("태그없음", (tagMap.get("태그없음") || 0) + 1);
@@ -176,7 +180,7 @@ export async function GET(request: NextRequest) {
 
     // Daily breakdown
     const dailyMap = new Map<string, { total: number; ai: number; human: number }>();
-    for (const chat of allChats) {
+    for (const chat of displayChats) {
       const ts = chat.createdAt || chat.openedAt;
       if (!ts) continue;
       const d = new Date(ts);
@@ -194,68 +198,61 @@ export async function GET(request: NextRequest) {
 
     // State breakdown
     const stateMap = { closed: 0, opened: 0, snoozed: 0 };
-    for (const chat of allChats) {
+    for (const chat of displayChats) {
       const state = chat.state as keyof typeof stateMap;
       if (state in stateMap) stateMap[state]++;
     }
 
-    // Week comparison data
-    let comparison = null;
-    if (mode === "compare" && compareFrom !== null && compareUntil !== null) {
-      const thisWeekStart = getWeekStart(now);
-      const thisWeekEnd = getWeekEnd(thisWeekStart);
+    // Week comparison (Wed-Tue)
+    const dayLabels = ["수", "목", "금", "토", "일", "월", "화"];
+    const lastWeekDaily = new Array(7).fill(0);
+    const thisWeekDaily = new Array(7).fill(0);
 
-      const lastWeekChats = allChats.filter((c) => {
-        const ts = c.createdAt || c.openedAt || 0;
-        return ts >= compareFrom! && ts <= compareUntil!;
-      });
-      const thisWeekChats = allChats.filter((c) => {
-        const ts = c.createdAt || c.openedAt || 0;
-        return ts >= thisWeekStart.getTime() && ts <= thisWeekEnd.getTime();
-      });
-
-      // Daily breakdown for each week (Wed=0, Thu=1, ..., Tue=6)
-      const dayLabels = ["수", "목", "금", "토", "일", "월", "화"];
-      const lastWeekDaily = new Array(7).fill(0);
-      const thisWeekDaily = new Array(7).fill(0);
-
-      for (const chat of lastWeekChats) {
-        const ts = chat.createdAt || chat.openedAt;
-        if (!ts) continue;
-        const d = new Date(ts);
-        const day = d.getDay();
-        const idx = day >= 3 ? day - 3 : day + 4;
-        lastWeekDaily[idx]++;
-      }
-      for (const chat of thisWeekChats) {
-        const ts = chat.createdAt || chat.openedAt;
-        if (!ts) continue;
-        const d = new Date(ts);
-        const day = d.getDay();
-        const idx = day >= 3 ? day - 3 : day + 4;
-        thisWeekDaily[idx]++;
-      }
-
-      comparison = {
-        labels: dayLabels,
-        lastWeek: {
-          total: lastWeekChats.length,
-          daily: lastWeekDaily,
-          startDate: new Date(compareFrom).toISOString().split("T")[0],
-        },
-        thisWeek: {
-          total: thisWeekChats.length,
-          daily: thisWeekDaily,
-          startDate: thisWeekStart.toISOString().split("T")[0],
-        },
-      };
+    for (const chat of lastWeekChats) {
+      const ts = chat.createdAt || chat.openedAt;
+      if (!ts) continue;
+      const d = new Date(ts);
+      const day = d.getDay();
+      const idx = day >= 3 ? day - 3 : day + 4;
+      lastWeekDaily[idx]++;
     }
+    for (const chat of thisWeekChats) {
+      const ts = chat.createdAt || chat.openedAt;
+      if (!ts) continue;
+      const d = new Date(ts);
+      const day = d.getDay();
+      const idx = day >= 3 ? day - 3 : day + 4;
+      thisWeekDaily[idx]++;
+    }
+
+    const comparison = {
+      labels: dayLabels,
+      lastWeek: {
+        total: lastWeekChats.length,
+        daily: lastWeekDaily,
+        startDate: lastWeekStart.toISOString().split("T")[0],
+        endDate: lastWeekEnd.toISOString().split("T")[0],
+      },
+      thisWeek: {
+        total: thisWeekChats.length,
+        daily: thisWeekDaily,
+        startDate: thisWeekStart.toISOString().split("T")[0],
+        endDate: thisWeekEnd.toISOString().split("T")[0],
+      },
+    };
 
     const result = {
       mode,
-      total: allChats.length,
-      ai: { count: aiChats.length, ratio: allChats.length > 0 ? Math.round((aiChats.length / allChats.length) * 100) : 0 },
-      human: { count: humanChats.length, ratio: allChats.length > 0 ? Math.round((humanChats.length / allChats.length) * 100) : 0 },
+      total: displayChats.length,
+      totalFetched: allChats.length,
+      ai: {
+        count: aiChats.length,
+        ratio: displayChats.length > 0 ? Math.round((aiChats.length / displayChats.length) * 100) : 0,
+      },
+      human: {
+        count: humanChats.length,
+        ratio: displayChats.length > 0 ? Math.round((humanChats.length / displayChats.length) * 100) : 0,
+      },
       states: stateMap,
       tags: tagBreakdown,
       daily,
