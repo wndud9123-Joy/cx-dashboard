@@ -287,7 +287,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
   }
 
-  const cacheKey = `v16-new-tag-analysis-${Date.now()}`;
+  const cacheKey = `v17-timeout-fix-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -295,9 +295,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 10), // 타임아웃 방지: ~5,000건
-      fetchChatsByState("opened", sinceTs, 5),  // 타임아웃 방지: ~2,500건  
-      fetchChatsByState("snoozed", sinceTs, 5), // 타임아웃 방지: ~2,500건
+      fetchChatsByState("closed", sinceTs, 5), // 타임아웃 방지: ~2,500건
+      fetchChatsByState("opened", sinceTs, 3),  // 타임아웃 방지: ~1,500건  
+      fetchChatsByState("snoozed", sinceTs, 2), // 타임아웃 방지: ~1,000건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
