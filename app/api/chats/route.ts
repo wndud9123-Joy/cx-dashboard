@@ -223,6 +223,24 @@ export async function GET(request: NextRequest) {
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
     });
 
+    // 디버깅: 날짜별 분포 확인
+    const dateCounts: Record<string, number> = {};
+    allChats.forEach(c => {
+      const ts = c.openedAt || c.createdAt || 0;
+      if (ts > 0) {
+        const dateStr = toKSTDateStr(new Date(ts));
+        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      }
+    });
+    
+    // 지난주 샘플 데이터
+    const lastWeekSample = lastWeekChats.slice(0, 3).map(chat => ({
+      id: chat.id?.substring(0, 8) + '...',
+      openedAt: chat.openedAt ? new Date(chat.openedAt).toISOString().substring(0, 19) : null,
+      createdAt: chat.createdAt ? new Date(chat.createdAt).toISOString().substring(0, 19) : null,
+      tags: chat.tags?.slice(0, 2) || []
+    }));
+
     // Overall
     const thisAiTotal = thisWeekChats.filter(isAiChat).length;
     const lastAiTotal = lastWeekChats.filter(isAiChat).length;
@@ -265,6 +283,24 @@ export async function GET(request: NextRequest) {
       period: {
         thisWeek: { from: toKSTDateStr(thisWeekStartUTC), to: toKSTDateStr(thisWeekEnd) },
         lastWeek: { from: toKSTDateStr(lastWeekStartUTC), to: toKSTDateStr(lastWeekEnd) },
+      },
+      debug: {
+        lastWeekRange: {
+          start: lastWeekStartUTC.getTime(),
+          end: lastWeekEnd.getTime(),
+          startKST: toKSTDateStr(lastWeekStartUTC),
+          endKST: toKSTDateStr(lastWeekEnd),
+        },
+        dailyCounts: Object.keys(dateCounts)
+          .filter(date => date >= '2026-02-20' && date <= '2026-03-15')
+          .sort()
+          .map(date => ({ date, count: dateCounts[date] || 0 })),
+        lastWeekSample,
+        collectStats: {
+          totalFetched: allChats.length,
+          thisWeekFiltered: thisWeekChats.length,
+          lastWeekFiltered: lastWeekChats.length,
+        }
       },
     };
 
