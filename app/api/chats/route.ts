@@ -186,13 +186,13 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    // 2월 1일부터 수집 (충분한 범위 확보)
-    const feb1st = new Date('2026-02-01T00:00:00+09:00');
-    sinceTs = feb1st.getTime();
+    // 지난주 시작 3일 전부터 수집 (안전 마진)
+    const earlierStart = new Date(lastWeekStartUTC.getTime() - 3 * 24 * 60 * 60 * 1000);
+    sinceTs = earlierStart.getTime();
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v9-asc-feb1st-${sinceTs}-${untilTs}`;
+  const cacheKey = `v10-asc-limited-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -200,9 +200,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 500), // 최대한 증가: 250,000건
-      fetchChatsByState("opened", sinceTs, 200), // 최대한 증가: 100,000건
-      fetchChatsByState("snoozed", sinceTs, 100), // 최대한 증가: 50,000건
+      fetchChatsByState("closed", sinceTs, 100), // 타임아웃 방지: 50,000건
+      fetchChatsByState("opened", sinceTs, 50), // 타임아웃 방지: 25,000건
+      fetchChatsByState("snoozed", sinceTs, 20), // 타임아웃 방지: 10,000건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
