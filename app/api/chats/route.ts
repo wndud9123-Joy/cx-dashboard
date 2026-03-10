@@ -185,11 +185,13 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    sinceTs = lastWeekStartUTC.getTime();
+    // 3주 전부터 수집 (지난주 데이터 확실히 포함)
+    const threeWeeksAgo = new Date(lastWeekStartUTC.getTime() - 14 * 24 * 60 * 60 * 1000);
+    sinceTs = threeWeeksAgo.getTime();
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v4-${sinceTs}-${untilTs}`;
+  const cacheKey = `v5-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -197,9 +199,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 60), // 30 → 60 (최대 30,000건)
-      fetchChatsByState("opened", sinceTs, 30), // 15 → 30 (최대 15,000건)
-      fetchChatsByState("snoozed", sinceTs, 10), // 5 → 10 (최대 5,000건)
+      fetchChatsByState("closed", sinceTs, 200), // 대폭 증가: 100,000건
+      fetchChatsByState("opened", sinceTs, 80),  // 대폭 증가: 40,000건  
+      fetchChatsByState("snoozed", sinceTs, 40), // 대폭 증가: 20,000건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
@@ -222,6 +224,26 @@ export async function GET(request: NextRequest) {
       const ts = c.openedAt || c.createdAt || 0;
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
     });
+
+    // 임시 디버깅: 수집 현황 확인
+    const collectDebug = {
+      fetchCounts: {
+        closed: closed.length,
+        opened: opened.length, 
+        snoozed: snoozed.length,
+        total: allChats.length
+      },
+      dateRange: {
+        sinceTs: new Date(sinceTs).toISOString(),
+        untilTs: new Date(untilTs).toISOString(),
+        lastWeekStart: lastWeekStartUTC.toISOString(),
+        lastWeekEnd: lastWeekEnd.toISOString()
+      },
+      filterResults: {
+        thisWeek: thisWeekChats.length,
+        lastWeek: lastWeekChats.length
+      }
+    };
 
 
 
@@ -268,6 +290,7 @@ export async function GET(request: NextRequest) {
         thisWeek: { from: toKSTDateStr(thisWeekStartUTC), to: toKSTDateStr(thisWeekEnd) },
         lastWeek: { from: toKSTDateStr(lastWeekStartUTC), to: toKSTDateStr(lastWeekEnd) },
       },
+      collectDebug,
     };
 
     cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
