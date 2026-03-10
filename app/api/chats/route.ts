@@ -36,12 +36,17 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     const batch = data.userChats || [];
     const nextCursor = data.next || null;
 
-    let reachedEnd = false;
+    let oldDataCount = 0;
     for (const chat of batch) {
       const ts = chat.openedAt || chat.createdAt || 0;
-      if (ts >= sinceTs) chats.push(chat);
-      else reachedEnd = true;
+      if (ts >= sinceTs) {
+        chats.push(chat);
+      } else {
+        oldDataCount++; // 오래된 데이터 카운트
+      }
     }
+    // 배치의 90% 이상이 오래된 데이터면 종료 (더 관대한 조건)
+    const reachedEnd = oldDataCount > (batch.length * 0.9);
 
     pages++;
     if (reachedEnd || batch.length < 500 || !nextCursor) break;
@@ -185,13 +190,12 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    // 3주 전부터 수집 (지난주 데이터 확실히 포함)
-    const threeWeeksAgo = new Date(lastWeekStartUTC.getTime() - 14 * 24 * 60 * 60 * 1000);
-    sinceTs = threeWeeksAgo.getTime();
+    // 지난주 시작부터 수집 (더 정확한 범위)
+    sinceTs = lastWeekStartUTC.getTime();
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v5-${sinceTs}-${untilTs}`;
+  const cacheKey = `v6-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -199,9 +203,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 200), // 대폭 증가: 100,000건
-      fetchChatsByState("opened", sinceTs, 80),  // 대폭 증가: 40,000건  
-      fetchChatsByState("snoozed", sinceTs, 40), // 대폭 증가: 20,000건
+      fetchChatsByState("closed", sinceTs, 500), // 최대한 증가: 250,000건
+      fetchChatsByState("opened", sinceTs, 200), // 최대한 증가: 100,000건
+      fetchChatsByState("snoozed", sinceTs, 100), // 최대한 증가: 50,000건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
