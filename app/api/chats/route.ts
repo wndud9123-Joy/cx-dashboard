@@ -53,7 +53,7 @@ async function fetchChatsByState(
 
     let reachedEnd = false;
     for (const chat of batch) {
-      const ts = chat.createdAt || chat.openedAt || 0;
+      const ts = chat.openedAt || chat.createdAt || 0;
       if (ts >= sinceTs) {
         chats.push(chat);
       } else {
@@ -111,21 +111,17 @@ function analyzeChats(chats: any[]) {
     "마켓": { counts: { "판매자": 0, "구매자": 0, "공통": 0 }, tags: {} },
   };
 
-  const unclassifiedTags = new Map<string, number>();
-
   for (const chat of chats) {
     const tags = chat.tags || [];
     for (const tag of tags) {
-      const { segment, subSegment } = classifyTag(tag);
-      if (segment === "미분류") {
-        unclassifiedTags.set(tag, (unclassifiedTags.get(tag) || 0) + 1);
-        continue;
-      }
+      const result = classifyTag(tag);
+      if (!result) continue; // 미분류 제외
+      const { segment, subSegment, mappedTag } = result;
       segments[segment].counts[subSegment] = (segments[segment].counts[subSegment] || 0) + 1;
-      if (!segments[segment].tags[tag]) {
-        segments[segment].tags[tag] = { count: 0, subSegment };
+      if (!segments[segment].tags[mappedTag]) {
+        segments[segment].tags[mappedTag] = { count: 0, subSegment };
       }
-      segments[segment].tags[tag].count++;
+      segments[segment].tags[mappedTag].count++;
     }
   }
 
@@ -141,7 +137,7 @@ function analyzeChats(chats: any[]) {
   // Daily breakdown (KST dates)
   const dailyMap = new Map<string, { total: number; ai: number; human: number; cared: number; market: number }>();
   for (const chat of chats) {
-    const ts = chat.createdAt || chat.openedAt;
+    const ts = chat.openedAt || chat.createdAt;
     if (!ts) continue;
     const kstDate = new Date(ts + KST_OFFSET);
     const key = `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, "0")}-${String(kstDate.getDate()).padStart(2, "0")}`;
@@ -153,9 +149,10 @@ function analyzeChats(chats: any[]) {
     const chatTags = chat.tags || [];
     let hasCared = false, hasMarket = false;
     for (const tag of chatTags) {
-      const { segment } = classifyTag(tag);
-      if (segment === "케어드") hasCared = true;
-      if (segment === "마켓") hasMarket = true;
+      const result = classifyTag(tag);
+      if (!result) continue;
+      if (result.segment === "케어드") hasCared = true;
+      if (result.segment === "마켓") hasMarket = true;
     }
     if (hasCared) entry.cared++;
     if (hasMarket) entry.market++;
@@ -177,9 +174,7 @@ function analyzeChats(chats: any[]) {
     human: { count: chats.length - aiChats.length, ratio: chats.length > 0 ? Math.round(((chats.length - aiChats.length) / chats.length) * 100) : 0 },
     cared: buildSegmentData("케어드"),
     market: buildSegmentData("마켓"),
-    unclassifiedTags: Array.from(unclassifiedTags.entries())
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count),
+    unclassifiedTags: [] as { tag: string; count: number }[],
     daily,
     states,
   };
@@ -233,7 +228,7 @@ export async function GET(request: NextRequest) {
 
     // Filter by time range
     allChats = allChats.filter((chat) => {
-      const ts = chat.createdAt || chat.openedAt || 0;
+      const ts = chat.openedAt || chat.createdAt || 0;
       return ts >= sinceTs && ts <= untilTs;
     });
 
@@ -258,14 +253,14 @@ export async function GET(request: NextRequest) {
     const lastWeekDaily = new Array(7).fill(0);
     const thisWeekDaily = new Array(7).fill(0);
     for (const chat of lastWeekChats) {
-      const ts = chat.createdAt || chat.openedAt;
+      const ts = chat.openedAt || chat.createdAt;
       if (!ts) continue;
       const kstDay = new Date(ts + KST_OFFSET).getDay();
       const idx = kstDay >= 3 ? kstDay - 3 : kstDay + 4;
       lastWeekDaily[idx]++;
     }
     for (const chat of thisWeekChats) {
-      const ts = chat.createdAt || chat.openedAt;
+      const ts = chat.openedAt || chat.createdAt;
       if (!ts) continue;
       const kstDay = new Date(ts + KST_OFFSET).getDay();
       const idx = kstDay >= 3 ? kstDay - 3 : kstDay + 4;

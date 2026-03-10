@@ -62,12 +62,21 @@ export function classifyMarketSubSegment(tag: string): "판매자" | "구매자"
 export type Segment = "케어드" | "마켓" | "미분류";
 export type SubSegment = "판매" | "구매" | "기타" | "판매자" | "구매자" | "공통";
 
-export function classifyTag(tag: string): { segment: Segment; subSegment: SubSegment } {
-  if (isMarketTag(tag)) {
-    return { segment: "마켓", subSegment: classifyMarketSubSegment(tag) };
+// 태그 매핑 (이름 변경/통합)
+const TAG_MAPPING: Record<string, string> = {
+  "판매자/수거마켓번호오류": "판매자/재수거요청",
+};
+
+export function classifyTag(tag: string): { segment: Segment; subSegment: SubSegment; mappedTag: string } | null {
+  // Apply mapping
+  const mappedTag = TAG_MAPPING[tag] || tag;
+
+  if (isMarketTag(mappedTag)) {
+    return { segment: "마켓", subSegment: classifyMarketSubSegment(mappedTag), mappedTag };
   }
-  if (CARED_TAGS.has(tag)) {
-    return { segment: "케어드", subSegment: classifyCaredSubSegment(tag) };
+  if (CARED_TAGS.has(mappedTag)) {
+    return { segment: "케어드", subSegment: classifyCaredSubSegment(mappedTag), mappedTag };
   }
-  return { segment: "미분류", subSegment: "기타" };
+  // 미분류 → 제외
+  return null;
 }
