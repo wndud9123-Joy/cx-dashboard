@@ -1,3 +1,62 @@
+// 마켓 태그 목록 (prefix 기반)
+export const MARKET_TAGS = new Set([
+  // 공통
+  "공통/앱 기능 관련 문의",
+  "공통/앱 오류 관련 문의",
+  "공통/마켓 구조 이해 문의",
+  "공통/구매 옵션 문의",
+  "공통/구매 옵션 런칭 문의",
+  "공통/정책 관련 문의",
+  "공통/배송비 관련 문의",
+  "공통/상태값 변경 관련 문의",
+  
+  // 구매자
+  "구매자/쿠폰 적용 문의",
+  "구매자/반품 가능 문의(구매 확정)",
+  "구매자/주문 취소 요청",
+  "구매자/배송 일정 문의",
+  "구매자/상품 추가 정보 문의",
+  "구매자/구매 옵션 변경 문의",
+  "구매자/구매 취소 확인 문의",
+  "구매자/오배송 관련 문의",
+  "구매자/추가 하자 상품 구매 문의",
+  "구매자/반품 거절 관련 문의",
+  "구매자/수거 확인 문의",
+  "구매자/수거일 확인 문의",
+  "구매자/수거지 변경 문의",
+  "구매자/재수거 요청",
+  "구매자/배송지 변경 문의",
+  "구매자/결제 취소 사유 문의",
+  "구매자/정가품여부확인문의",
+  
+  // 판매자
+  "판매자/배송·수거 방법 문의",
+  "판매자/배송 일정 문의",
+  "판매자/주문 관리 문의",
+  "판매자/판매 취소 문의",
+  "판매자/마켓 구조 문의",
+  "판매자/판매 가능 상품 문의",
+  "판매자/상품등록·수정방법문의",
+  "판매자/판매 상품 목록 확인 문의",
+  "판매자/브랜드 등록 관련 문의",
+  "판매자/수수료 관련 문의",
+  "판매자/정산 관련 문의",
+  "판매자/반품 절차 확인 문의",
+  "판매자/반품 배송비 관련 문의",
+  "판매자/검수 기준 문의",
+  "판매자/검수 일정 문의",
+  "판매자/추가 하자 관련 문의",
+  "판매자/재판매 가능 여부 문의",
+  "판매자/재판매 거부(회수) 문의",
+  "판매자/오수거 관련 문의",
+  "판매자/수거 확인 문의",
+  "판매자/수거일 확인 문의",
+  "판매자/수거지 변경 문의",
+  "판매자/재수거 요청",
+  "판매자/정책 위반 판매 중지 관련 문의",
+  "판매자/분실물 확인 문의",
+]);
+
 // 케어드 태그 목록 (flat name)
 export const CARED_TAGS = new Set([
   "수거일변경", "반품수거일정", "종료절차", "판매가능상품", "판매불가사유",
@@ -30,12 +89,12 @@ export const CARED_TAGS = new Set([
 const CARED_SELL_KEYWORDS = [
   "판매", "kg판매", "수수료_판매", "이벤트지급_판매", "이벤트문의_판매",
   "기타문의_판매", "친구초대_판매", "신청방법_판매", "판매철회", "판매정보수정",
-  "판매시작", "반품판매재개", "판매자보상",
+  "판매시작", "반품판매재개", "판매자보상", "판매가능상품", "판매불가사유", "판매내역"
 ];
 
 const CARED_BUY_KEYWORDS = [
   "구매", "첫구매", "수수료_구매", "이벤트지급_구매", "이벤트문의_구매",
-  "친구초대_구매", "구매자보상", "구매확정",
+  "친구초대_구매", "구매자보상", "구매확정"
 ];
 
 export function classifyCaredSubSegment(tag: string): "판매" | "구매" | "기타" {
@@ -48,23 +107,31 @@ export function classifyCaredSubSegment(tag: string): "판매" | "구매" | "기
   return "기타";
 }
 
-// 마켓 태그: prefix 기반
+// 마켓 태그 분류
 export function isMarketTag(tag: string): boolean {
-  return tag.startsWith("공통/") || tag.startsWith("구매자/") || tag.startsWith("판매자/");
+  return MARKET_TAGS.has(tag);
 }
 
 export function classifyMarketSubSegment(tag: string): "판매자" | "구매자" | "공통" {
   if (tag.startsWith("판매자/")) return "판매자";
   if (tag.startsWith("구매자/")) return "구매자";
+  if (tag.startsWith("공통/")) return "공통";
   return "공통";
 }
 
-export type Segment = "케어드" | "마켓" | "미분류";
+export type Segment = "케어드" | "마켓";
 export type SubSegment = "판매" | "구매" | "기타" | "판매자" | "구매자" | "공통";
 
 // 태그 매핑 (이름 변경/통합)
 const TAG_MAPPING: Record<string, string> = {
   "판매자/수거마켓번호오류": "판매자/재수거요청",
+  "구매자/반품가능문의(구매확정)": "구매자/반품 가능 문의(구매 확정)",
+  "판매자/재판매가능여부문의": "판매자/재판매 가능 여부 문의",
+  "판매자/상품등록·수정방법문의": "판매자/상품등록·수정방법문의",
+  // 기존 태그들도 매핑
+  "배송일정문의": "배송일정",
+  "구매옵션문의": "공통/구매 옵션 문의",
+  "재수거요청": "재수거요청", // 케어드 또는 마켓으로 분기
 };
 
 export function classifyTag(tag: string): { segment: Segment; subSegment: SubSegment; mappedTag: string } | null {
@@ -77,6 +144,7 @@ export function classifyTag(tag: string): { segment: Segment; subSegment: SubSeg
   if (CARED_TAGS.has(mappedTag)) {
     return { segment: "케어드", subSegment: classifyCaredSubSegment(mappedTag), mappedTag };
   }
-  // 미분류 → 제외
+  
+  // 미분류 태그는 제외
   return null;
 }

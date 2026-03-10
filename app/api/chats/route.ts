@@ -84,6 +84,104 @@ interface TagStat {
   aiRatio: number;
 }
 
+function analyzeNewSegment(
+  thisWeekChats: any[],
+  lastWeekChats: any[],
+  segmentName: "케어드" | "마켓"
+) {
+  // 이번주와 지난주 태그 카운트
+  const thisWeekTags = new Map<string, { count: number; ai: number }>();
+  const lastWeekTags = new Map<string, { count: number; ai: number }>();
+  
+  let thisWeekTotal = 0;
+  let thisWeekAi = 0;
+  let lastWeekTotal = 0;
+  let lastWeekAi = 0;
+
+  // 이번주 데이터 처리
+  for (const chat of thisWeekChats) {
+    const isAi = isAiChat(chat);
+    for (const tag of (chat.tags || [])) {
+      const result = classifyTag(tag);
+      if (!result || result.segment !== segmentName) continue;
+      
+      const { mappedTag } = result;
+      thisWeekTotal++;
+      if (isAi) thisWeekAi++;
+      
+      const entry = thisWeekTags.get(mappedTag) || { count: 0, ai: 0 };
+      entry.count++;
+      if (isAi) entry.ai++;
+      thisWeekTags.set(mappedTag, entry);
+    }
+  }
+
+  // 지난주 데이터 처리
+  for (const chat of lastWeekChats) {
+    const isAi = isAiChat(chat);
+    for (const tag of (chat.tags || [])) {
+      const result = classifyTag(tag);
+      if (!result || result.segment !== segmentName) continue;
+      
+      const { mappedTag } = result;
+      lastWeekTotal++;
+      if (isAi) lastWeekAi++;
+      
+      const entry = lastWeekTags.get(mappedTag) || { count: 0, ai: 0 };
+      entry.count++;
+      if (isAi) entry.ai++;
+      lastWeekTags.set(mappedTag, entry);
+    }
+  }
+
+  // 모든 태그 합치기
+  const allTags = new Set([...thisWeekTags.keys(), ...lastWeekTags.keys()]);
+  const tagAnalysis: Array<{
+    tag: string;
+    thisWeek: number;
+    lastWeek: number;
+    change: number;
+    changeRate: number;
+    aiCount: number;
+    aiRatio: number;
+  }> = [];
+
+  for (const tag of allTags) {
+    const thisWeek = thisWeekTags.get(tag);
+    const lastWeek = lastWeekTags.get(tag);
+    const thisWeekCount = thisWeek?.count || 0;
+    const lastWeekCount = lastWeek?.count || 0;
+    const change = thisWeekCount - lastWeekCount;
+    const changeRate = lastWeekCount > 0 ? Math.round((change / lastWeekCount) * 100) : (thisWeekCount > 0 ? 100 : 0);
+    
+    tagAnalysis.push({
+      tag,
+      thisWeek: thisWeekCount,
+      lastWeek: lastWeekCount,
+      change,
+      changeRate,
+      aiCount: thisWeek?.ai || 0,
+      aiRatio: thisWeekCount > 0 ? Math.round(((thisWeek?.ai || 0) / thisWeekCount) * 100) : 0
+    });
+  }
+
+  // 이번주 기준으로 정렬
+  tagAnalysis.sort((a, b) => b.thisWeek - a.thisWeek);
+
+  // 전체 증감 계산
+  const totalChange = lastWeekTotal > 0 ? Math.round(((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100) : 0;
+  const thisWeekAiRatio = thisWeekTotal > 0 ? Math.round((thisWeekAi / thisWeekTotal) * 100) : 0;
+  const lastWeekAiRatio = lastWeekTotal > 0 ? Math.round((lastWeekAi / lastWeekTotal) * 100) : 0;
+
+  return {
+    thisWeek: { total: thisWeekTotal, ai: thisWeekAi, aiRatio: thisWeekAiRatio },
+    lastWeek: { total: lastWeekTotal, ai: lastWeekAi, aiRatio: lastWeekAiRatio },
+    change: thisWeekTotal - lastWeekTotal,
+    changeRate: totalChange,
+    tags: tagAnalysis
+  };
+}
+
 function analyzeSegment(
   thisWeekChats: any[],
   lastWeekChats: any[],
@@ -189,7 +287,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
   }
 
-  const cacheKey = `v15-force-new-pagination-${Date.now()}`;
+  const cacheKey = `v16-new-tag-analysis-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -223,26 +321,6 @@ export async function GET(request: NextRequest) {
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
     });
 
-    // 자세한 디버깅: 날짜 필드 분포 확인
-    const sampleData = allChats.slice(0, 5).map(chat => ({
-      id: chat.id?.substring(0, 8) + '...',
-      createdAt: chat.createdAt ? new Date(chat.createdAt).toISOString().substring(0, 19) : null,
-      openedAt: chat.openedAt ? new Date(chat.openedAt).toISOString().substring(0, 19) : null,
-      closedAt: chat.closedAt ? new Date(chat.closedAt).toISOString().substring(0, 19) : null,
-      state: chat.state,
-      assigneeId: chat.assigneeId || null
-    }));
-
-    // 날짜별 분포 (createdAt 기준 - 상담 인입)
-    const dateCounts: Record<string, number> = {};
-    allChats.forEach(c => {
-      const ts = c.createdAt || c.openedAt || 0;
-      if (ts > 0) {
-        const dateStr = toKSTDateStr(new Date(ts));
-        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-      }
-    });
-
     const collectDebug = {
       fetchCounts: {
         closed: closed.length,
@@ -250,27 +328,10 @@ export async function GET(request: NextRequest) {
         snoozed: snoozed.length,
         total: allChats.length
       },
-      fetchDetails: {
-        closedPages: Math.ceil(closed.length / 500),
-        openedPages: Math.ceil(opened.length / 500),
-        snoozedPages: Math.ceil(snoozed.length / 500),
-        requestedPages: { closed: 500, opened: 200, snoozed: 100 }
-      },
-      dateRange: {
-        sinceTs: new Date(sinceTs).toISOString(),
-        untilTs: new Date(untilTs).toISOString(),
-        lastWeekStart: lastWeekStartUTC.toISOString(),
-        lastWeekEnd: lastWeekEnd.toISOString()
-      },
       filterResults: {
         thisWeek: thisWeekChats.length,
         lastWeek: lastWeekChats.length
-      },
-      sampleData,
-      dailyCounts: Object.keys(dateCounts)
-        .filter(date => date >= '2026-02-20' && date <= '2026-03-15')
-        .sort()
-        .map(date => ({ date, count: dateCounts[date] || 0 }))
+      }
     };
 
 
@@ -298,9 +359,9 @@ export async function GET(request: NextRequest) {
       .slice(0, 10)
       .map(([tag, count]) => ({ tag, count }));
 
-    // Segments
-    const cared = analyzeSegment(thisWeekChats, lastWeekChats, "케어드", ["판매", "구매", "기타"]);
-    const market = analyzeSegment(thisWeekChats, lastWeekChats, "마켓", ["판매자", "구매자", "공통"]);
+    // 새로운 분석 로직
+    const caredAnalysis = analyzeNewSegment(thisWeekChats, lastWeekChats, "케어드");
+    const marketAnalysis = analyzeNewSegment(thisWeekChats, lastWeekChats, "마켓");
 
     const result = {
       mode,
@@ -312,8 +373,8 @@ export async function GET(request: NextRequest) {
         aiChange,
         aiTopTags: aiTopAll,
       },
-      cared,
-      market,
+      cared: caredAnalysis,
+      market: marketAnalysis,
       period: {
         thisWeek: { from: toKSTDateStr(thisWeekStartUTC), to: toKSTDateStr(thisWeekEnd) },
         lastWeek: { from: toKSTDateStr(lastWeekStartUTC), to: toKSTDateStr(lastWeekEnd) },
