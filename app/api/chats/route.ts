@@ -7,11 +7,12 @@ const BASE_URL = "https://api.channel.io/open/v5";
 
 const cache = new Map<string, { data: any; expires: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
+const KST_OFFSET = 9 * 60 * 60 * 1000; // UTC+9
 
 async function fetchChatsByState(
   state: string,
   sinceTs: number,
-  maxPages: number = 100
+  maxPages: number = 30
 ): Promise<any[]> {
   const chats: any[] = [];
   let next: string | null = null;
@@ -21,7 +22,7 @@ async function fetchChatsByState(
     const params = new URLSearchParams({
       state,
       sortOrder: "desc",
-      limit: "50",
+      limit: "500",
     });
     if (next) params.set("next", next);
 
@@ -61,28 +62,37 @@ async function fetchChatsByState(
     }
 
     pages++;
-    if (reachedEnd || batch.length < 50 || !nextCursor) break;
+    if (reachedEnd || batch.length < 500 || !nextCursor) break;
     next = nextCursor;
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   return chats;
 }
 
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
+// KST-based week: Wed 00:00 KST ~ Tue 23:59:59 KST
+function getWeekStartKST(date: Date): Date {
+  // Convert to KST
+  const kstMs = date.getTime() + KST_OFFSET;
+  const kst = new Date(kstMs);
+  kst.setHours(0, 0, 0, 0);
+  const day = kst.getDay(); // 0=Sun, 3=Wed
   const diff = day >= 3 ? day - 3 : day + 4;
-  d.setDate(d.getDate() - diff);
+  kst.setDate(kst.getDate() - diff);
+  // Convert back to UTC
+  return new Date(kst.getTime() - KST_OFFSET);
+}
+
+function getWeekEndKST(weekStartUTC: Date): Date {
+  const d = new Date(weekStartUTC.getTime());
+  d.setDate(d.getDate() + 7);
+  d.setMilliseconds(-1);
   return d;
 }
 
-function getWeekEnd(weekStart: Date): Date {
-  const d = new Date(weekStart);
-  d.setDate(d.getDate() + 6);
-  d.setHours(23, 59, 59, 999);
-  return d;
+function toKSTDateStr(utcDate: Date): string {
+  const kst = new Date(utcDate.getTime() + KST_OFFSET);
+  return `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
 }
 
 interface SegmentData {
@@ -92,16 +102,13 @@ interface SegmentData {
 }
 
 function analyzeChats(chats: any[]) {
-  // AI vs Human
   const aiChats = chats.filter(
     (c) => !c.assigneeId && (!c.managerIds || c.managerIds.length === 0)
   );
 
-  // Segment analysis
-  const segments: Record<Segment, { counts: Record<SubSegment, number>; tags: Record<string, { count: number; subSegment: string }> }> = {
-    "케어드": { counts: { "판매": 0, "구매": 0, "기타": 0, "판매자": 0, "구매자": 0, "공통": 0 }, tags: {} },
-    "마켓": { counts: { "판매": 0, "구매": 0, "기타": 0, "판매자": 0, "구매자": 0, "공통": 0 }, tags: {} },
-    "미분류": { counts: { "판매": 0, "구매": 0, "기타": 0, "판매자": 0, "구매자": 0, "공통": 0 }, tags: {} },
+  const segments: Record<string, { counts: Record<string, number>; tags: Record<string, { count: number; subSegment: string }> }> = {
+    "케어드": { counts: { "판매": 0, "구매": 0, "기타": 0 }, tags: {} },
+    "마켓": { counts: { "판매자": 0, "구매자": 0, "공통": 0 }, tags: {} },
   };
 
   const unclassifiedTags = new Map<string, number>();
@@ -110,13 +117,11 @@ function analyzeChats(chats: any[]) {
     const tags = chat.tags || [];
     for (const tag of tags) {
       const { segment, subSegment } = classifyTag(tag);
-
       if (segment === "미분류") {
         unclassifiedTags.set(tag, (unclassifiedTags.get(tag) || 0) + 1);
         continue;
       }
-
-      segments[segment].counts[subSegment]++;
+      segments[segment].counts[subSegment] = (segments[segment].counts[subSegment] || 0) + 1;
       if (!segments[segment].tags[tag]) {
         segments[segment].tags[tag] = { count: 0, subSegment };
       }
@@ -124,34 +129,27 @@ function analyzeChats(chats: any[]) {
     }
   }
 
-  // Build segment data
-  const buildSegmentData = (seg: Segment, subKeys: SubSegment[]): SegmentData => {
+  const buildSegmentData = (seg: string): SegmentData => {
     const s = segments[seg];
-    const subSegments: Record<string, number> = {};
-    for (const k of subKeys) {
-      subSegments[k] = s.counts[k];
-    }
-    const total = Object.values(subSegments).reduce((a, b) => a + b, 0);
+    const total = Object.values(s.counts).reduce((a, b) => a + b, 0);
     const tags = Object.entries(s.tags)
       .map(([tag, data]) => ({ tag, count: data.count, subSegment: data.subSegment }))
       .sort((a, b) => b.count - a.count);
-    return { total, subSegments, tags };
+    return { total, subSegments: s.counts, tags };
   };
 
-  // Daily breakdown
+  // Daily breakdown (KST dates)
   const dailyMap = new Map<string, { total: number; ai: number; human: number; cared: number; market: number }>();
   for (const chat of chats) {
     const ts = chat.createdAt || chat.openedAt;
     if (!ts) continue;
-    const d = new Date(ts);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const kstDate = new Date(ts + KST_OFFSET);
+    const key = `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, "0")}-${String(kstDate.getDate()).padStart(2, "0")}`;
     const entry = dailyMap.get(key) || { total: 0, ai: 0, human: 0, cared: 0, market: 0 };
     entry.total++;
     const isAi = !chat.assigneeId && (!chat.managerIds || chat.managerIds.length === 0);
     if (isAi) entry.ai++;
     else entry.human++;
-
-    // Classify chat by its tags
     const chatTags = chat.tags || [];
     let hasCared = false, hasMarket = false;
     for (const tag of chatTags) {
@@ -167,7 +165,6 @@ function analyzeChats(chats: any[]) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, data]) => ({ date, ...data }));
 
-  // State breakdown
   const states = { closed: 0, opened: 0, snoozed: 0 };
   for (const chat of chats) {
     const state = chat.state as keyof typeof states;
@@ -178,8 +175,8 @@ function analyzeChats(chats: any[]) {
     total: chats.length,
     ai: { count: aiChats.length, ratio: chats.length > 0 ? Math.round((aiChats.length / chats.length) * 100) : 0 },
     human: { count: chats.length - aiChats.length, ratio: chats.length > 0 ? Math.round(((chats.length - aiChats.length) / chats.length) * 100) : 0 },
-    cared: buildSegmentData("케어드", ["판매", "구매", "기타"]),
-    market: buildSegmentData("마켓", ["판매자", "구매자", "공통"]),
+    cared: buildSegmentData("케어드"),
+    market: buildSegmentData("마켓"),
     unclassifiedTags: Array.from(unclassifiedTags.entries())
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count),
@@ -195,22 +192,23 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get("to");
 
   const now = new Date();
-  const thisWeekStart = getWeekStart(now);
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeekStartUTC = getWeekStartKST(now);
+  const lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   let sinceTs: number;
   let untilTs: number;
 
   if (mode === "range" && from && to) {
-    sinceTs = new Date(from).getTime();
-    untilTs = new Date(to).getTime() + 24 * 60 * 60 * 1000 - 1;
+    // from/to are in KST date strings, convert to UTC
+    sinceTs = new Date(from + "T00:00:00+09:00").getTime();
+    untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    sinceTs = lastWeekStart.getTime();
-    untilTs = getWeekEnd(thisWeekStart).getTime();
+    // 2 weeks: last Wed ~ this Tue (KST)
+    sinceTs = lastWeekStartUTC.getTime();
+    untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v2-${mode}-${sinceTs}-${untilTs}`;
+  const cacheKey = `v3-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -218,9 +216,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 100),
-      fetchChatsByState("opened", sinceTs, 40),
-      fetchChatsByState("snoozed", sinceTs, 10),
+      fetchChatsByState("closed", sinceTs, 30),
+      fetchChatsByState("opened", sinceTs, 15),
+      fetchChatsByState("snoozed", sinceTs, 5),
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
@@ -240,19 +238,18 @@ export async function GET(request: NextRequest) {
     });
 
     // Split weeks
-    const thisWeekEnd = getWeekEnd(thisWeekStart);
-    const lastWeekEnd = getWeekEnd(lastWeekStart);
+    const thisWeekEndUTC = getWeekEndKST(thisWeekStartUTC);
+    const lastWeekEndUTC = getWeekEndKST(lastWeekStartUTC);
 
     const thisWeekChats = allChats.filter((c) => {
       const ts = c.createdAt || c.openedAt || 0;
-      return ts >= thisWeekStart.getTime() && ts <= thisWeekEnd.getTime();
+      return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEndUTC.getTime();
     });
     const lastWeekChats = allChats.filter((c) => {
       const ts = c.createdAt || c.openedAt || 0;
-      return ts >= lastWeekStart.getTime() && ts <= lastWeekEnd.getTime();
+      return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEndUTC.getTime();
     });
 
-    const displayChats = mode === "range" ? allChats : thisWeekChats;
     const thisWeekAnalysis = analyzeChats(thisWeekChats);
     const lastWeekAnalysis = analyzeChats(lastWeekChats);
 
@@ -263,15 +260,15 @@ export async function GET(request: NextRequest) {
     for (const chat of lastWeekChats) {
       const ts = chat.createdAt || chat.openedAt;
       if (!ts) continue;
-      const day = new Date(ts).getDay();
-      const idx = day >= 3 ? day - 3 : day + 4;
+      const kstDay = new Date(ts + KST_OFFSET).getDay();
+      const idx = kstDay >= 3 ? kstDay - 3 : kstDay + 4;
       lastWeekDaily[idx]++;
     }
     for (const chat of thisWeekChats) {
       const ts = chat.createdAt || chat.openedAt;
       if (!ts) continue;
-      const day = new Date(ts).getDay();
-      const idx = day >= 3 ? day - 3 : day + 4;
+      const kstDay = new Date(ts + KST_OFFSET).getDay();
+      const idx = kstDay >= 3 ? kstDay - 3 : kstDay + 4;
       thisWeekDaily[idx]++;
     }
 
@@ -280,13 +277,13 @@ export async function GET(request: NextRequest) {
       totalFetched: allChats.length,
       thisWeek: {
         ...thisWeekAnalysis,
-        startDate: thisWeekStart.toISOString().split("T")[0],
-        endDate: thisWeekEnd.toISOString().split("T")[0],
+        startDate: toKSTDateStr(thisWeekStartUTC),
+        endDate: toKSTDateStr(thisWeekEndUTC),
       },
       lastWeek: {
         ...lastWeekAnalysis,
-        startDate: lastWeekStart.toISOString().split("T")[0],
-        endDate: lastWeekEnd.toISOString().split("T")[0],
+        startDate: toKSTDateStr(lastWeekStartUTC),
+        endDate: toKSTDateStr(lastWeekEndUTC),
       },
       comparison: {
         labels: dayLabels,
@@ -303,8 +300,8 @@ export async function GET(request: NextRequest) {
           : 0,
       },
       period: {
-        from: new Date(sinceTs).toISOString().split("T")[0],
-        to: new Date(untilTs).toISOString().split("T")[0],
+        from: toKSTDateStr(new Date(sinceTs)),
+        to: toKSTDateStr(new Date(untilTs)),
       },
     };
 
