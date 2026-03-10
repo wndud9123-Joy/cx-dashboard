@@ -220,44 +220,150 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* 세그먼트별 증감 비교 그래프 */}
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-              <h3 className="text-white text-xl font-bold mb-6">📊 케어드 vs 마켓 증감 비교</h3>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[
-                    { name: '케어드', 지난주: data.cared.lastWeek.total, 이번주: data.cared.thisWeek.total },
-                    { name: '마켓', 지난주: data.market.lastWeek.total, 이번주: data.market.thisWeek.total }
-                  ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="name" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#f3f4f6' }}
-                    />
-                    <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="이번주" fill="#3b82f6" name="이번주" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-4 text-center">
-                <div>
-                  <p className="text-blue-400 font-bold text-lg">케어드 증감</p>
-                  <p className={`text-2xl font-bold ${data.cared.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    {data.cared.changeRate >= 0 ? '+' : ''}{data.cared.changeRate}%
+            {/* 그래프 섹션 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* 전체 문의 증감 그래프 */}
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+                <h3 className="text-white text-xl font-bold mb-6">📈 전체 문의 증감</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={[
+                      { name: '전체 문의', 지난주: totalLastWeek, 이번주: totalThisWeek }
+                    ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="name" stroke="#9ca3af" />
+                      <YAxis stroke="#9ca3af" />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelStyle={{ color: '#f3f4f6' }}
+                      />
+                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#10b981" name="이번주" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="text-center mt-4">
+                  <p className="text-emerald-400 font-bold text-lg">전체 증감</p>
+                  <p className={`text-3xl font-bold ${totalChange >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {totalChange >= 0 ? '+' : ''}{totalChange}%
                   </p>
                   <p className="text-gray-400 text-sm">
-                    {data.cared.lastWeek.total.toLocaleString()} → {data.cared.thisWeek.total.toLocaleString()}
+                    {totalLastWeek.toLocaleString()} → {totalThisWeek.toLocaleString()} ({totalChangeAbs >= 0 ? '+' : ''}{totalChangeAbs}건)
                   </p>
                 </div>
+              </div>
+
+              {/* 케어드 vs 마켓 증감 그래프 */}
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+                <h3 className="text-white text-xl font-bold mb-6">🏷️ 케어드 vs 마켓 증감</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={[
+                      { name: '케어드', 지난주: data.cared.lastWeek.total, 이번주: data.cared.thisWeek.total },
+                      { name: '마켓', 지난주: data.market.lastWeek.total, 이번주: data.market.thisWeek.total }
+                    ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="name" stroke="#9ca3af" />
+                      <YAxis stroke="#9ca3af" />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelStyle={{ color: '#f3f4f6' }}
+                      />
+                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#3b82f6" name="이번주" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4 text-center">
+                  <div>
+                    <p className="text-blue-400 font-bold">케어드</p>
+                    <p className={`text-lg font-bold ${data.cared.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      {data.cared.changeRate >= 0 ? '+' : ''}{data.cared.changeRate}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-purple-400 font-bold">마켓</p>
+                    <p className={`text-lg font-bold ${data.market.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      {data.market.changeRate >= 0 ? '+' : ''}{data.market.changeRate}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* AI 비중 파이차트 */}
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+              <h3 className="text-white text-xl font-bold mb-6">🤖 AI vs 상담사 처리 비중</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {/* 지난주 파이차트 */}
                 <div>
-                  <p className="text-purple-400 font-bold text-lg">마켓 증감</p>
-                  <p className={`text-2xl font-bold ${data.market.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    {data.market.changeRate >= 0 ? '+' : ''}{data.market.changeRate}%
+                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">지난주 ({totalLastWeek.toLocaleString()}건)</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'AI 자동처리', value: data.cared.lastWeek.ai + data.market.lastWeek.ai, fill: '#6366f1' },
+                            { name: '상담사 처리', value: totalLastWeek - (data.cared.lastWeek.ai + data.market.lastWeek.ai), fill: '#f59e0b' }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          dataKey="value"
+                          label={({ name, percent }) => `${name}\n${(percent * 100).toFixed(0)}%`}
+                          labelLine={false}
+                        />
+                        <Tooltip formatter={(value) => `${Number(value).toLocaleString()}건`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* 이번주 파이차트 */}
+                <div>
+                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">이번주 ({totalThisWeek.toLocaleString()}건)</h4>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'AI 자동처리', value: totalAiThisWeek, fill: '#6366f1' },
+                            { name: '상담사 처리', value: totalThisWeek - totalAiThisWeek, fill: '#f59e0b' }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          dataKey="value"
+                          label={({ name, percent }) => `${name}\n${(percent * 100).toFixed(0)}%`}
+                          labelLine={false}
+                        />
+                        <Tooltip formatter={(value) => `${Number(value).toLocaleString()}건`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+              </div>
+              
+              {/* AI 비중 요약 */}
+              <div className="mt-6 grid grid-cols-2 gap-4 text-center">
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm">지난주 AI 처리율</p>
+                  <p className="text-2xl font-bold text-indigo-400">
+                    {totalLastWeek > 0 ? Math.round(((data.cared.lastWeek.ai + data.market.lastWeek.ai) / totalLastWeek) * 100) : 0}%
                   </p>
-                  <p className="text-gray-400 text-sm">
-                    {data.market.lastWeek.total.toLocaleString()} → {data.market.thisWeek.total.toLocaleString()}
+                  <p className="text-sm text-gray-500">
+                    {(data.cared.lastWeek.ai + data.market.lastWeek.ai).toLocaleString()}건 자동처리
+                  </p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm">이번주 AI 처리율</p>
+                  <p className="text-2xl font-bold text-indigo-400">{totalAiRatio}%</p>
+                  <p className="text-sm text-gray-500">
+                    {totalAiThisWeek.toLocaleString()}건 자동처리
                   </p>
                 </div>
               </div>
