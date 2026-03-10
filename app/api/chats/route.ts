@@ -15,7 +15,7 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
   let pages = 0;
 
   while (pages < maxPages) {
-    const params = new URLSearchParams({ state, sortOrder: "asc", limit: "500" });
+    const params = new URLSearchParams({ state, sortOrder: "desc", limit: "500" });
     if (next) params.set("next", next);
 
     let res: Response | null = null;
@@ -37,7 +37,7 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     const nextCursor = data.next || null;
 
     for (const chat of batch) {
-      const ts = chat.createdAt || chat.openedAt || 0; // createdAt 우선
+      const ts = chat.openedAt || chat.createdAt || 0; // openedAt 우선 (상담 인입 기준)
       if (ts >= sinceTs) {
         chats.push(chat);
       }
@@ -186,13 +186,13 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    // 지난주 시작 3일 전부터 수집 (안전 마진)
-    const earlierStart = new Date(lastWeekStartUTC.getTime() - 3 * 24 * 60 * 60 * 1000);
+    // 지난주 시작 1주일 전부터 수집 (충분한 안전 마진)
+    const earlierStart = new Date(lastWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
     sinceTs = earlierStart.getTime();
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v10-asc-limited-${sinceTs}-${untilTs}`;
+  const cacheKey = `v11-openedAt-desc-aggressive-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -200,9 +200,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 100), // 타임아웃 방지: 50,000건
-      fetchChatsByState("opened", sinceTs, 50), // 타임아웃 방지: 25,000건
-      fetchChatsByState("snoozed", sinceTs, 20), // 타임아웃 방지: 10,000건
+      fetchChatsByState("closed", sinceTs, 300), // 더 많이: 150,000건
+      fetchChatsByState("opened", sinceTs, 150), // 더 많이: 75,000건
+      fetchChatsByState("snoozed", sinceTs, 50), // 더 많이: 25,000건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
     allChats = allChats.filter((c) => {
       if (seen.has(c.id)) return false;
       seen.add(c.id);
-      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선
+      const ts = c.openedAt || c.createdAt || 0; // openedAt 우선 (상담 인입 기준)
       return ts >= sinceTs && ts <= untilTs;
     });
 
@@ -218,11 +218,11 @@ export async function GET(request: NextRequest) {
     const lastWeekEnd = getWeekEndKST(lastWeekStartUTC);
 
     const thisWeekChats = allChats.filter((c) => {
-      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선
+      const ts = c.openedAt || c.createdAt || 0; // openedAt 우선 (상담 인입 기준)
       return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEnd.getTime();
     });
     const lastWeekChats = allChats.filter((c) => {
-      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선  
+      const ts = c.openedAt || c.createdAt || 0; // openedAt 우선 (상담 인입 기준)
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
     });
 
@@ -235,10 +235,10 @@ export async function GET(request: NextRequest) {
       state: chat.state
     }));
 
-    // 날짜별 분포 (createdAt 기준)
+    // 날짜별 분포 (openedAt 기준 - 상담 인입)
     const dateCounts: Record<string, number> = {};
     allChats.forEach(c => {
-      const ts = c.createdAt || c.openedAt || 0;
+      const ts = c.openedAt || c.createdAt || 0;
       if (ts > 0) {
         const dateStr = toKSTDateStr(new Date(ts));
         dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
