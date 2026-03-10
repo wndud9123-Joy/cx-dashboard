@@ -42,8 +42,8 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     }
 
     pages++;
-    // 조기 종료 제거: 모든 페이지를 끝까지 가져오기
-    if (batch.length < 500 || !nextCursor) break;
+    // next가 null일 때만 종료 (배치 크기와 무관)
+    if (!nextCursor) break;
     next = nextCursor;
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
   }
 
-  const cacheKey = `v14-correct-pagination-since-${untilTs}`;
+  const cacheKey = `v15-force-new-pagination-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
