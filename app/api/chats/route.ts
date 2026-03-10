@@ -36,20 +36,16 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     const batch = data.userChats || [];
     const nextCursor = data.next || null;
 
-    let oldDataCount = 0;
     for (const chat of batch) {
       const ts = chat.openedAt || chat.createdAt || 0;
       if (ts >= sinceTs) {
         chats.push(chat);
-      } else {
-        oldDataCount++; // 오래된 데이터 카운트
       }
     }
-    // 배치의 90% 이상이 오래된 데이터면 종료 (더 관대한 조건)
-    const reachedEnd = oldDataCount > (batch.length * 0.9);
 
     pages++;
-    if (reachedEnd || batch.length < 500 || !nextCursor) break;
+    // 조기 종료 제거: 모든 페이지를 끝까지 가져오기
+    if (batch.length < 500 || !nextCursor) break;
     next = nextCursor;
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -195,7 +191,7 @@ export async function GET(request: NextRequest) {
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v6-${sinceTs}-${untilTs}`;
+  const cacheKey = `v7-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
