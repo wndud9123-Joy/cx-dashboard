@@ -16,7 +16,7 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
 
   while (pages < maxPages) {
     const params = new URLSearchParams({ state, sortOrder: "desc", limit: "500" });
-    if (next) params.set("next", next);
+    if (next) params.set("since", next); // since 파라미터로 페이지네이션
 
     let res: Response | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
   }
 
-  const cacheKey = `v13-no-date-filter-all-data-${untilTs}`;
+  const cacheKey = `v14-correct-pagination-since-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
