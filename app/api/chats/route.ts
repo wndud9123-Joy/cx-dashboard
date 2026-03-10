@@ -37,10 +37,8 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     const nextCursor = data.next || null;
 
     for (const chat of batch) {
-      const ts = chat.createdAt || chat.openedAt || 0; // createdAt 기준 (상담 인입)
-      if (ts >= sinceTs) {
-        chats.push(chat);
-      }
+      // 모든 채팅을 수집 (API에 날짜 필터 없음, 클라이언트에서 필터링)
+      chats.push(chat);
     }
 
     pages++;
@@ -186,13 +184,12 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    // 지난주 시작 1주일 전부터 수집 (충분한 안전 마진)
-    const earlierStart = new Date(lastWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
-    sinceTs = earlierStart.getTime();
-    untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
+    // 모든 데이터 가져오기 (API에 날짜 필터 없음)
+    sinceTs = 0; // 필터링 제거
+    untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
   }
 
-  const cacheKey = `v12-createdAt-correct-${sinceTs}-${untilTs}`;
+  const cacheKey = `v13-no-date-filter-all-data-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
