@@ -11,7 +11,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 async function fetchChatsByState(
   state: string,
   sinceTs: number,
-  maxPages: number = 80
+  maxPages: number = 100
 ): Promise<any[]> {
   const chats: any[] = [];
   let next: string | null = null;
@@ -218,8 +218,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 80),
-      fetchChatsByState("opened", sinceTs, 30),
+      fetchChatsByState("closed", sinceTs, 100),
+      fetchChatsByState("opened", sinceTs, 40),
       fetchChatsByState("snoozed", sinceTs, 10),
     ]);
 
