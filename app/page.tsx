@@ -162,7 +162,50 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* 세그먼트별 요약 */}
+            {/* 세그먼트별 증감 비교 그래프 */}
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+              <h3 className="text-white text-xl font-bold mb-6">📊 케어드 vs 마켓 증감 비교</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={[
+                    { name: '케어드', 지난주: data.cared.lastWeek.total, 이번주: data.cared.thisWeek.total },
+                    { name: '마켓', 지난주: data.market.lastWeek.total, 이번주: data.market.thisWeek.total }
+                  ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="name" stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#f3f4f6' }}
+                    />
+                    <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="이번주" fill="#3b82f6" name="이번주" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4 text-center">
+                <div>
+                  <p className="text-blue-400 font-bold text-lg">케어드 증감</p>
+                  <p className={`text-2xl font-bold ${data.cared.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {data.cared.changeRate >= 0 ? '+' : ''}{data.cared.changeRate}%
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    {data.cared.lastWeek.total.toLocaleString()} → {data.cared.thisWeek.total.toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-purple-400 font-bold text-lg">마켓 증감</p>
+                  <p className={`text-2xl font-bold ${data.market.changeRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {data.market.changeRate >= 0 ? '+' : ''}{data.market.changeRate}%
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    {data.market.lastWeek.total.toLocaleString()} → {data.market.thisWeek.total.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 세그먼트별 요약 카드 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <SegmentCard
                 title="🛠️ 케어드 문의"
