@@ -197,9 +197,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 300), // 더 많이: 150,000건
-      fetchChatsByState("opened", sinceTs, 150), // 더 많이: 75,000건
-      fetchChatsByState("snoozed", sinceTs, 50), // 더 많이: 25,000건
+      fetchChatsByState("closed", sinceTs, 10), // 타임아웃 방지: ~5,000건
+      fetchChatsByState("opened", sinceTs, 5),  // 타임아웃 방지: ~2,500건  
+      fetchChatsByState("snoozed", sinceTs, 5), // 타임아웃 방지: ~2,500건
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
