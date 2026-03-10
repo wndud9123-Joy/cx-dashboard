@@ -37,7 +37,7 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
     const nextCursor = data.next || null;
 
     for (const chat of batch) {
-      const ts = chat.openedAt || chat.createdAt || 0;
+      const ts = chat.createdAt || chat.openedAt || 0; // createdAt 우선
       if (ts >= sinceTs) {
         chats.push(chat);
       }
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v7-${sinceTs}-${untilTs}`;
+  const cacheKey = `v8-createdAt-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
     allChats = allChats.filter((c) => {
       if (seen.has(c.id)) return false;
       seen.add(c.id);
-      const ts = c.openedAt || c.createdAt || 0;
+      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선
       return ts >= sinceTs && ts <= untilTs;
     });
 
@@ -217,15 +217,33 @@ export async function GET(request: NextRequest) {
     const lastWeekEnd = getWeekEndKST(lastWeekStartUTC);
 
     const thisWeekChats = allChats.filter((c) => {
-      const ts = c.openedAt || c.createdAt || 0;
+      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선
       return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEnd.getTime();
     });
     const lastWeekChats = allChats.filter((c) => {
-      const ts = c.openedAt || c.createdAt || 0;
+      const ts = c.createdAt || c.openedAt || 0; // createdAt 우선  
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
     });
 
-    // 임시 디버깅: 수집 현황 확인
+    // 자세한 디버깅: 날짜 필드 분포 확인
+    const sampleData = allChats.slice(0, 5).map(chat => ({
+      id: chat.id?.substring(0, 8) + '...',
+      createdAt: chat.createdAt ? new Date(chat.createdAt).toISOString().substring(0, 19) : null,
+      openedAt: chat.openedAt ? new Date(chat.openedAt).toISOString().substring(0, 19) : null,
+      closedAt: chat.closedAt ? new Date(chat.closedAt).toISOString().substring(0, 19) : null,
+      state: chat.state
+    }));
+
+    // 날짜별 분포 (createdAt 기준)
+    const dateCounts: Record<string, number> = {};
+    allChats.forEach(c => {
+      const ts = c.createdAt || c.openedAt || 0;
+      if (ts > 0) {
+        const dateStr = toKSTDateStr(new Date(ts));
+        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+      }
+    });
+
     const collectDebug = {
       fetchCounts: {
         closed: closed.length,
@@ -242,7 +260,12 @@ export async function GET(request: NextRequest) {
       filterResults: {
         thisWeek: thisWeekChats.length,
         lastWeek: lastWeekChats.length
-      }
+      },
+      sampleData,
+      dailyCounts: Object.keys(dateCounts)
+        .filter(date => date >= '2026-02-20' && date <= '2026-03-15')
+        .sort()
+        .map(date => ({ date, count: dateCounts[date] || 0 }))
     };
 
 
