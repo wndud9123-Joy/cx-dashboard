@@ -44,9 +44,18 @@ export default function Dashboard() {
   const [data, setData] = useState<ApiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"summary" | "cared" | "market" | "daily">("summary");
+  const [dateMode, setDateMode] = useState<"auto" | "custom">("auto");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  useEffect(() => {
-    fetch("/api/chats")
+  const fetchData = (mode: "auto" | "custom" = "auto", from?: string, to?: string) => {
+    setLoading(true);
+    let url = "/api/chats";
+    if (mode === "custom" && from && to) {
+      url += `?mode=range&from=${from}&to=${to}`;
+    }
+    
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         setData(data);
@@ -55,6 +64,10 @@ export default function Dashboard() {
       .catch(() => {
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
   if (loading) {
@@ -92,10 +105,55 @@ export default function Dashboard() {
       {/* Header */}
       <header className="border-b border-gray-800 px-6 py-4">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">CX</div>
-            <h1 className="text-xl font-semibold">상담 분석 대시보드</h1>
-            <span className="text-xs text-green-400 bg-green-900 px-2 py-1 rounded">✅ {data.totalFetched.toLocaleString()}건 수집</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">CX</div>
+              <h1 className="text-xl font-semibold">상담 분석 대시보드</h1>
+              <span className="text-xs text-green-400 bg-green-900 px-2 py-1 rounded">✅ {data.totalFetched.toLocaleString()}건 수집</span>
+            </div>
+            
+            {/* 날짜 선택 */}
+            <div className="flex items-center gap-3">
+              <select
+                value={dateMode}
+                onChange={(e) => setDateMode(e.target.value as "auto" | "custom")}
+                className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+              >
+                <option value="auto">자동 (수~화 주간)</option>
+                <option value="custom">사용자 지정</option>
+              </select>
+              
+              {dateMode === "custom" && (
+                <>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+                    placeholder="시작일"
+                  />
+                  <span className="text-gray-400">~</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+                    placeholder="종료일"
+                  />
+                  <button
+                    onClick={() => {
+                      if (fromDate && toDate) {
+                        fetchData("custom", fromDate, toDate);
+                      }
+                    }}
+                    disabled={!fromDate || !toDate || loading}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    조회
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
