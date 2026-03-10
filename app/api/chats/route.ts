@@ -15,7 +15,7 @@ async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30):
   let pages = 0;
 
   while (pages < maxPages) {
-    const params = new URLSearchParams({ state, sortOrder: "desc", limit: "500" });
+    const params = new URLSearchParams({ state, sortOrder: "asc", limit: "500" });
     if (next) params.set("next", next);
 
     let res: Response | null = null;
@@ -186,12 +186,13 @@ export async function GET(request: NextRequest) {
     sinceTs = new Date(from + "T00:00:00+09:00").getTime();
     untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
   } else {
-    // 지난주 시작부터 수집 (더 정확한 범위)
-    sinceTs = lastWeekStartUTC.getTime();
+    // 2월 1일부터 수집 (충분한 범위 확보)
+    const feb1st = new Date('2026-02-01T00:00:00+09:00');
+    sinceTs = feb1st.getTime();
     untilTs = getWeekEndKST(thisWeekStartUTC).getTime();
   }
 
-  const cacheKey = `v8-createdAt-${sinceTs}-${untilTs}`;
+  const cacheKey = `v9-asc-feb1st-${sinceTs}-${untilTs}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -250,6 +251,12 @@ export async function GET(request: NextRequest) {
         opened: opened.length, 
         snoozed: snoozed.length,
         total: allChats.length
+      },
+      fetchDetails: {
+        closedPages: Math.ceil(closed.length / 500),
+        openedPages: Math.ceil(opened.length / 500),
+        snoozedPages: Math.ceil(snoozed.length / 500),
+        requestedPages: { closed: 500, opened: 200, snoozed: 100 }
       },
       dateRange: {
         sinceTs: new Date(sinceTs).toISOString(),
