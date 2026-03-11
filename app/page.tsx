@@ -45,8 +45,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"summary" | "cared" | "market" | "daily">("summary");
   const [dateMode, setDateMode] = useState<"auto" | "custom">("auto");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState("2026-03-04");
+  const [toDate, setToDate] = useState("2026-03-10");
 
   const fetchData = (mode: "auto" | "custom" = "auto", from?: string, to?: string) => {
     setLoading(true);
@@ -67,6 +67,20 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    // 현재 시스템 날짜 기반 기본값 설정
+    const now = new Date();
+    const currentWeekStart = new Date(now);
+    currentWeekStart.setDate(now.getDate() - ((now.getDay() + 4) % 7)); // 수요일 시작
+    const currentWeekEnd = new Date(currentWeekStart);
+    currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // 화요일 종료
+    
+    const formatDate = (date: Date) => {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    
+    if (!fromDate) setFromDate(formatDate(currentWeekStart));
+    if (!toDate) setToDate(formatDate(currentWeekEnd));
+    
     fetchData();
   }, []);
 

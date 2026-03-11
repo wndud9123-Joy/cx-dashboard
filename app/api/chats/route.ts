@@ -270,6 +270,8 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get("mode") || "compare";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  
+  console.log("[DEBUG] API params:", { mode, from, to });
 
   let thisWeekStartUTC: Date;
   let lastWeekStartUTC: Date;
@@ -303,7 +305,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  const cacheKey = `v20-debug-custom-dates-${Date.now()}`;
+  const cacheKey = `v21-fix-params-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
