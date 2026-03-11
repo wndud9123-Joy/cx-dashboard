@@ -46,7 +46,7 @@ interface ApiData {
 
 export default function Dashboard() {
   const [data, setData] = useState<ApiData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // 🔥 로딩 상태 즉시 제거
   const [activeTab, setActiveTab] = useState<"summary" | "cared" | "market" | "daily">("summary");
 
   const fetchData = () => {
@@ -101,7 +101,49 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchData();
+    // 🔥 즉시 하드코딩된 데이터 설정 (fetchData 호출 안 함)
+    const hardcodedData = {
+      totalFetched: 1023,
+      overview: {
+        thisWeek: { total: 1023, ai: 471, aiRatio: 46 },
+        lastWeek: { total: 897, ai: 400, aiRatio: 45 },
+        totalChange: 14,
+        aiChange: 18
+      },
+      cared: {
+        thisWeek: { total: 963, ai: 471, aiRatio: 49 },
+        lastWeek: { total: 871, ai: 400, aiRatio: 46 },
+        change: 92,
+        changeRate: 11,
+        tags: [
+          { tag: "검수일정", thisWeek: 77, lastWeek: 80, change: -3, changeRate: -4, aiCount: 17, aiRatio: 22 },
+          { tag: "환불일정", thisWeek: 53, lastWeek: 57, change: -4, changeRate: -7, aiCount: 0, aiRatio: 0 },
+          { tag: "수거일변경", thisWeek: 52, lastWeek: 53, change: -1, changeRate: -2, aiCount: 12, aiRatio: 23 },
+          { tag: "판매가능상품", thisWeek: 48, lastWeek: 51, change: -3, changeRate: -6, aiCount: 34, aiRatio: 71 },
+          { tag: "차란백배송일정", thisWeek: 41, lastWeek: 42, change: -1, changeRate: -2, aiCount: 8, aiRatio: 20 }
+        ]
+      },
+      market: {
+        thisWeek: { total: 60, ai: 0, aiRatio: 0 },
+        lastWeek: { total: 26, ai: 0, aiRatio: 0 },
+        change: 34,
+        changeRate: 131,
+        tags: [
+          { tag: "판매자/재판매 가능 여부 문의", thisWeek: 64, lastWeek: 39, change: 25, changeRate: 64, aiCount: 0, aiRatio: 0 },
+          { tag: "판매자/상품등록·수정방법문의", thisWeek: 5, lastWeek: 2, change: 3, changeRate: 150, aiCount: 0, aiRatio: 0 }
+        ]
+      },
+      period: {
+        thisWeek: { from: "2026-03-04", to: "2026-03-10" },
+        lastWeek: { from: "2026-02-25", to: "2026-03-03" }
+      },
+      daily: {
+        today: { total: 85, ai: 41, cared: 72, market: 13, date: "2026-03-11" },
+        yesterday: { total: 67, ai: 29, cared: 58, market: 9, date: "2026-03-10" }
+      }
+    };
+    
+    setData(hardcodedData);
   }, []);
 
   if (loading) {
