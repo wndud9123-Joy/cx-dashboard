@@ -310,12 +310,12 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  // 실시간 일별 데이터 (30분 캐시)
-  const cacheKey = `v26-realtime-daily`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
-    return NextResponse.json(cached.data);
-  }
+  // 실시간 일별 데이터 (캐시 비활성화 - 테스트)
+  const cacheKey = `v27-debug-daily-${Date.now()}`;
+  // const cached = cache.get(cacheKey);
+  // if (cached && cached.expires > Date.now()) {
+  //   return NextResponse.json(cached.data);
+  // }
 
   try {
     // 사용자 지정 모드에서는 더 많은 페이지 필요 (특정 기간 데이터 확보)
@@ -427,7 +427,9 @@ export async function GET(request: NextRequest) {
       return chatKST === yesterday;
     });
 
-    // 일별 분석
+    // 일별 분석 (디버깅 추가)
+    console.log("[DEBUG] Daily calculation:", { today, yesterday, todayChatsCount: todayChats.length, yesterdayChatsCount: yesterdayChats.length });
+    
     const dailyAnalysis = {
       today: {
         total: todayChats.length,
@@ -442,6 +444,13 @@ export async function GET(request: NextRequest) {
         cared: yesterdayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "케어드")).length,
         market: yesterdayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "마켓")).length,
         date: yesterday
+      },
+      debug: {
+        today,
+        yesterday,
+        totalChats: allChats.length,
+        todayChatsCount: todayChats.length,
+        yesterdayChatsCount: yesterdayChats.length
       }
     };
 
