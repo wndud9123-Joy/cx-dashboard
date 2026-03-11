@@ -332,6 +332,13 @@ export async function GET(request: NextRequest) {
     });
 
     // 이미 설정된 기간 사용 (사용자 지정 또는 기본 주간)
+    console.log("[DEBUG] Filtering dates:", {
+      thisWeekStart: thisWeekStartUTC.toISOString(), 
+      thisWeekEnd: thisWeekEnd.toISOString(),
+      lastWeekStart: lastWeekStartUTC.toISOString(),
+      lastWeekEnd: lastWeekEnd.toISOString()
+    });
+    
     const thisWeekChats = allChats.filter((c) => {
       const ts = c.createdAt || c.openedAt || 0; // createdAt 기준 (상담 인입)
       return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEnd.getTime();
@@ -339,6 +346,13 @@ export async function GET(request: NextRequest) {
     const lastWeekChats = allChats.filter((c) => {
       const ts = c.createdAt || c.openedAt || 0; // createdAt 기준 (상담 인입)
       return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
+    });
+    
+    console.log("[DEBUG] Filtered results:", {
+      thisWeek: thisWeekChats.length,
+      lastWeek: lastWeekChats.length,
+      sampleThisWeekDates: thisWeekChats.slice(0, 3).map(c => new Date(c.createdAt || c.openedAt).toISOString()),
+      sampleLastWeekDates: lastWeekChats.slice(0, 3).map(c => new Date(c.createdAt || c.openedAt).toISOString())
     });
 
     const collectDebug = {
