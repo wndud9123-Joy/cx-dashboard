@@ -281,15 +281,19 @@ export async function GET(request: NextRequest) {
   let untilTs: number;
 
   if (mode === "range" && from && to) {
-    // 사용자 지정 모드: 선택한 기간을 "이번주"로, 정확히 7일 전 주를 "지난주"로 설정
-    thisWeekStartUTC = new Date(from + "T00:00:00+09:00");
-    thisWeekEnd = new Date(to + "T23:59:59.999+09:00");
+    // 사용자 지정 모드: KST 기준으로 계산 (타임존 문제 해결)
+    const fromKST = new Date(from + "T00:00:00");  // KST로 파싱
+    const toKST = new Date(to + "T23:59:59.999");  // KST로 파싱
     
-    // 지난주: 선택한 시작일로부터 정확히 7일 전 시작하는 주간
+    // KST를 UTC로 변환 (-9시간)
+    thisWeekStartUTC = new Date(fromKST.getTime() - KST_OFFSET);
+    thisWeekEnd = new Date(toKST.getTime() - KST_OFFSET);
+    
+    // 지난주: 정확히 7일 전
     lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
     lastWeekEnd = new Date(lastWeekStartUTC.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
     
-    // 더 넓은 범위로 데이터 수집 (지난주 포함)
+    // 더 넓은 범위로 데이터 수집
     sinceTs = lastWeekStartUTC.getTime();
     untilTs = thisWeekEnd.getTime();
   } else {
@@ -305,8 +309,8 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  // 캐시 완전히 비활성화 (테스트용)
-  const cacheKey = `v22-no-cache-${Date.now()}`;
+  // 타임존 문제 해결
+  const cacheKey = `v23-timezone-fix-${Date.now()}`;
   // const cached = cache.get(cacheKey);
   // if (cached && cached.expires > Date.now()) {
   //   return NextResponse.json(cached.data);
@@ -331,28 +335,19 @@ export async function GET(request: NextRequest) {
       return ts >= sinceTs && ts <= untilTs;
     });
 
-    // 이미 설정된 기간 사용 (사용자 지정 또는 기본 주간)
-    console.log("[DEBUG] Filtering dates:", {
-      thisWeekStart: thisWeekStartUTC.toISOString(), 
-      thisWeekEnd: thisWeekEnd.toISOString(),
-      lastWeekStart: lastWeekStartUTC.toISOString(),
-      lastWeekEnd: lastWeekEnd.toISOString()
-    });
-    
+    // KST 기준 필터링 (타임존 일관성 유지)
     const thisWeekChats = allChats.filter((c) => {
-      const ts = c.createdAt || c.openedAt || 0; // createdAt 기준 (상담 인입)
-      return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEnd.getTime();
-    });
-    const lastWeekChats = allChats.filter((c) => {
-      const ts = c.createdAt || c.openedAt || 0; // createdAt 기준 (상담 인입)
-      return ts >= lastWeekStartUTC.getTime() && ts <= lastWeekEnd.getTime();
+      const ts = c.createdAt || c.openedAt || 0;
+      const chatKST = toKSTDateStr(new Date(ts));  // 채팅 날짜를 KST 문자열로 변환
+      return chatKST >= from && chatKST <= to;  // 문자열 비교로 간단히
     });
     
-    console.log("[DEBUG] Filtered results:", {
-      thisWeek: thisWeekChats.length,
-      lastWeek: lastWeekChats.length,
-      sampleThisWeekDates: thisWeekChats.slice(0, 3).map(c => new Date(c.createdAt || c.openedAt).toISOString()),
-      sampleLastWeekDates: lastWeekChats.slice(0, 3).map(c => new Date(c.createdAt || c.openedAt).toISOString())
+    const lastWeekChats = allChats.filter((c) => {
+      const ts = c.createdAt || c.openedAt || 0;
+      const chatKST = toKSTDateStr(new Date(ts));
+      const lastFrom = toKSTDateStr(lastWeekStartUTC);
+      const lastTo = toKSTDateStr(lastWeekEnd);
+      return chatKST >= lastFrom && chatKST <= lastTo;
     });
 
     const collectDebug = {
