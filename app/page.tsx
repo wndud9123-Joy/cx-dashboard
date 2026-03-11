@@ -52,7 +52,7 @@ export default function Dashboard() {
   const fetchData = () => {
     setLoading(true);
     
-    fetch("/api/chats")
+    fetch("/api/test-fixed")
       .then((res) => res.json())
       .then((data) => {
         setData(data);
