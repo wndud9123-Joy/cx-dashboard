@@ -58,6 +58,23 @@ export default function Dashboard() {
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
+        // 🔥 사용자 지정 모드에서 period 강제 수정
+        if (mode === "custom" && from && to) {
+          // 지난주 계산 (정확히 7일 전)
+          const fromDate = new Date(from);
+          const lastWeekFrom = new Date(fromDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const lastWeekTo = new Date(lastWeekFrom.getTime() + 6 * 24 * 60 * 60 * 1000);
+          
+          const formatDate = (date: Date) => {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          };
+          
+          data.period = {
+            thisWeek: { from: from, to: to },
+            lastWeek: { from: formatDate(lastWeekFrom), to: formatDate(lastWeekTo) }
+          };
+        }
+        
         setData(data);
         setLoading(false);
       })
