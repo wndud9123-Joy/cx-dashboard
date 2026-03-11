@@ -273,17 +273,7 @@ export async function GET(request: NextRequest) {
   
   console.log("[DEBUG] API params:", { mode, from, to });
   
-  // 사용자 지정 모드에서 즉시 반환 (테스트용)
-  if (mode === "range" && from && to) {
-    return NextResponse.json({
-      mode: "range",
-      period: {
-        thisWeek: { from: from, to: to },
-        lastWeek: { from: "TEST", to: "TEST" }
-      },
-      message: "사용자 지정 모드 테스트"
-    });
-  }
+  // 테스트 코드 제거, 정상 로직 진행
 
   let thisWeekStartUTC: Date;
   let lastWeekStartUTC: Date;
@@ -433,14 +423,20 @@ export async function GET(request: NextRequest) {
       },
       cared: caredAnalysis,
       market: marketAnalysis,
-      period: {
+      period: mode === "range" && from && to ? {
+        thisWeek: { from: from, to: to },
+        lastWeek: { 
+          from: toKSTDateStr(lastWeekStartUTC), 
+          to: toKSTDateStr(lastWeekEnd) 
+        },
+      } : {
         thisWeek: { 
-          from: mode === "range" ? from! : toKSTDateStr(thisWeekStartUTC), 
-          to: mode === "range" ? to! : toKSTDateStr(thisWeekEnd) 
+          from: toKSTDateStr(thisWeekStartUTC), 
+          to: toKSTDateStr(thisWeekEnd) 
         },
         lastWeek: { 
-          from: mode === "range" ? toKSTDateStr(lastWeekStartUTC) : toKSTDateStr(lastWeekStartUTC), 
-          to: mode === "range" ? toKSTDateStr(lastWeekEnd) : toKSTDateStr(lastWeekEnd) 
+          from: toKSTDateStr(lastWeekStartUTC), 
+          to: toKSTDateStr(lastWeekEnd) 
         },
       },
       collectDebug,
