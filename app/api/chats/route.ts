@@ -423,12 +423,12 @@ export async function GET(request: NextRequest) {
       market: marketAnalysis,
       period: {
         thisWeek: { 
-          from: mode === "range" ? from : toKSTDateStr(thisWeekStartUTC), 
-          to: mode === "range" ? to : toKSTDateStr(thisWeekEnd) 
+          from: mode === "range" ? from! : toKSTDateStr(thisWeekStartUTC), 
+          to: mode === "range" ? to! : toKSTDateStr(thisWeekEnd) 
         },
         lastWeek: { 
-          from: toKSTDateStr(lastWeekStartUTC), 
-          to: toKSTDateStr(lastWeekEnd) 
+          from: mode === "range" ? toKSTDateStr(lastWeekStartUTC) : toKSTDateStr(lastWeekStartUTC), 
+          to: mode === "range" ? toKSTDateStr(lastWeekEnd) : toKSTDateStr(lastWeekEnd) 
         },
       },
       collectDebug,
