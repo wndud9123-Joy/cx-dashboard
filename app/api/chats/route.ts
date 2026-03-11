@@ -440,6 +440,14 @@ export async function GET(request: NextRequest) {
         },
       },
       collectDebug,
+      apiDebug: {
+        mode,
+        from,
+        to,
+        isRange: mode === "range",
+        hasParams: Boolean(from && to),
+        condition: mode === "range" && from && to
+      }
     };
 
     // cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
