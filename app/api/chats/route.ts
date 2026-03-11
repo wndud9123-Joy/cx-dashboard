@@ -305,11 +305,12 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  const cacheKey = `v21-fix-params-${Date.now()}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
-    return NextResponse.json(cached.data);
-  }
+  // 캐시 완전히 비활성화 (테스트용)
+  const cacheKey = `v22-no-cache-${Date.now()}`;
+  // const cached = cache.get(cacheKey);
+  // if (cached && cached.expires > Date.now()) {
+  //   return NextResponse.json(cached.data);
+  // }
 
   try {
     // 사용자 지정 모드에서는 더 많은 페이지 필요 (특정 기간 데이터 확보)
@@ -360,7 +361,13 @@ export async function GET(request: NextRequest) {
         lastWeekStartUTC: lastWeekStartUTC.toISOString(),
         lastWeekEnd: lastWeekEnd.toISOString(),
         sinceTs: new Date(sinceTs).toISOString(),
-        untilTs: new Date(untilTs).toISOString()
+        untilTs: new Date(untilTs).toISOString(),
+        computedPeriod: {
+          thisWeekFrom: mode === "range" ? from : toKSTDateStr(thisWeekStartUTC),
+          thisWeekTo: mode === "range" ? to : toKSTDateStr(thisWeekEnd),
+          lastWeekFrom: toKSTDateStr(lastWeekStartUTC),
+          lastWeekTo: toKSTDateStr(lastWeekEnd)
+        }
       }
     };
 
@@ -418,7 +425,7 @@ export async function GET(request: NextRequest) {
       collectDebug,
     };
 
-    cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
+    // cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Error:", error);
