@@ -303,17 +303,20 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  const cacheKey = `v19-weekly-comparison-fix-${Date.now()}`;
+  const cacheKey = `v20-debug-custom-dates-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
   }
 
   try {
+    // 사용자 지정 모드에서는 더 많은 페이지 필요 (특정 기간 데이터 확보)
+    const maxPages = mode === "range" ? { closed: 15, opened: 10, snoozed: 5 } : { closed: 5, opened: 3, snoozed: 2 };
+    
     const [closed, opened, snoozed] = await Promise.all([
-      fetchChatsByState("closed", sinceTs, 5), // 타임아웃 방지: ~2,500건
-      fetchChatsByState("opened", sinceTs, 3),  // 타임아웃 방지: ~1,500건  
-      fetchChatsByState("snoozed", sinceTs, 2), // 타임아웃 방지: ~1,000건
+      fetchChatsByState("closed", sinceTs, maxPages.closed),
+      fetchChatsByState("opened", sinceTs, maxPages.opened),  
+      fetchChatsByState("snoozed", sinceTs, maxPages.snoozed),
     ]);
 
     let allChats = [...closed, ...opened, ...snoozed];
@@ -345,6 +348,17 @@ export async function GET(request: NextRequest) {
       filterResults: {
         thisWeek: thisWeekChats.length,
         lastWeek: lastWeekChats.length
+      },
+      debugDates: {
+        mode,
+        inputFrom: from,
+        inputTo: to,
+        thisWeekStartUTC: thisWeekStartUTC.toISOString(),
+        thisWeekEnd: thisWeekEnd.toISOString(),
+        lastWeekStartUTC: lastWeekStartUTC.toISOString(),
+        lastWeekEnd: lastWeekEnd.toISOString(),
+        sinceTs: new Date(sinceTs).toISOString(),
+        untilTs: new Date(untilTs).toISOString()
       }
     };
 
@@ -390,8 +404,14 @@ export async function GET(request: NextRequest) {
       cared: caredAnalysis,
       market: marketAnalysis,
       period: {
-        thisWeek: { from: toKSTDateStr(thisWeekStartUTC), to: toKSTDateStr(thisWeekEnd) },
-        lastWeek: { from: toKSTDateStr(lastWeekStartUTC), to: toKSTDateStr(lastWeekEnd) },
+        thisWeek: { 
+          from: mode === "range" ? from : toKSTDateStr(thisWeekStartUTC), 
+          to: mode === "range" ? to : toKSTDateStr(thisWeekEnd) 
+        },
+        lastWeek: { 
+          from: toKSTDateStr(lastWeekStartUTC), 
+          to: toKSTDateStr(lastWeekEnd) 
+        },
       },
       collectDebug,
     };
