@@ -26,9 +26,14 @@ export const CARED_TAGS = new Set([
   "알림", "등급", "반품분실", "전환취소", "친구초대_판매활성"
 ]);
 
-// 정확한 마켓 태그 목록 (사용자 제공)
+// 정확한 마켓 태그 목록 (실제 데이터 기반)
 export const MARKET_TAGS = new Set([
-  // 공통
+  // 실제 확인된 마켓 태그들 (정확한 형태)
+  "판매자/재판매 가능 여부 문의",
+  "구매자/반품 가능 문의(구매 확정)",  
+  "판매자/상품등록·수정방법문의",
+  
+  // 공통 (띄어쓰기 패턴 추정)
   "공통/앱 기능 관련 문의",
   "공통/앱 오류 관련 문의", 
   "공통/마켓 구조 이해 문의",
@@ -38,9 +43,8 @@ export const MARKET_TAGS = new Set([
   "공통/배송비 관련 문의",
   "공통/상태값 변경 관련 문의",
   
-  // 구매자
+  // 구매자 (띄어쓰기 패턴 추정)
   "구매자/쿠폰 적용 문의",
-  "구매자/반품 가능 문의(구매 확정)",
   "구매자/주문 취소 요청",
   "구매자/배송 일정 문의",
   "구매자/상품 추가 정보 문의",
@@ -57,14 +61,13 @@ export const MARKET_TAGS = new Set([
   "구매자/결제 취소 사유 문의",
   "구매자/정가품여부확인문의",
   
-  // 판매자
+  // 판매자 (띄어쓰기 패턴 추정)
   "판매자/배송·수거 방법 문의",
   "판매자/배송 일정 문의",
   "판매자/주문 관리 문의",
   "판매자/판매 취소 문의",
   "판매자/마켓 구조 문의",
   "판매자/판매 가능 상품 문의",
-  "판매자/상품등록·수정방법문의",
   "판매자/판매 상품 목록 확인 문의",
   "판매자/브랜드 등록 관련 문의",
   "판매자/수수료 관련 문의",
@@ -74,7 +77,6 @@ export const MARKET_TAGS = new Set([
   "판매자/검수 기준 문의",
   "판매자/검수 일정 문의",
   "판매자/추가 하자 관련 문의",
-  "판매자/재판매 가능 여부 문의",
   "판매자/재판매 거부(회수) 문의",
   "판매자/오수거 관련 문의",
   "판매자/수거 확인 문의",
@@ -118,14 +120,28 @@ export function classifyMarketSubSegment(tag: string): "판매자" | "구매자"
 export type Segment = "케어드" | "마켓";
 export type SubSegment = "판매" | "구매" | "기타" | "판매자" | "구매자" | "공통";
 
-// 단순화된 분류 함수
+// 띄어쓰기 무시 매칭 함수
+function normalizeTag(tag: string): string {
+  return tag.replace(/\s+/g, '');
+}
+
+// 단순화된 분류 함수 (띄어쓰기 무시)
 export function classifyTag(tag: string): { segment: Segment; subSegment: SubSegment; mappedTag: string } | null {
-  // 마켓 우선 확인
+  const normalizedTag = normalizeTag(tag);
+  
+  // 마켓 우선 확인 (원본 + 띄어쓰기 제거 둘 다)
   if (MARKET_TAGS.has(tag)) {
     return { segment: "마켓", subSegment: classifyMarketSubSegment(tag), mappedTag: tag };
   }
   
-  // 케어드 확인
+  // 띄어쓰기 제거한 버전으로 마켓 태그 확인
+  for (const marketTag of MARKET_TAGS) {
+    if (normalizeTag(marketTag) === normalizedTag) {
+      return { segment: "마켓", subSegment: classifyMarketSubSegment(marketTag), mappedTag: tag };
+    }
+  }
+  
+  // 케어드 확인 (원본)
   if (CARED_TAGS.has(tag)) {
     return { segment: "케어드", subSegment: classifyCaredSubSegment(tag), mappedTag: tag };
   }
