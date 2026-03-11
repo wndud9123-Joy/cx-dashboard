@@ -184,7 +184,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">CX</div>
-              <h1 className="text-xl font-semibold">상담 분석 대시보드</h1>
+              <h1 className="text-xl font-semibold">상담 분석 대시보드 [v2026.03.11.02.38]</h1>
               <span className="text-xs text-green-400 bg-green-900 px-2 py-1 rounded">✅ {data?.totalFetched?.toLocaleString() || "로딩중"}건 수집</span>
             </div>
             
