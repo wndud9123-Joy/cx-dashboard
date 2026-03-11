@@ -279,15 +279,13 @@ export async function GET(request: NextRequest) {
   let untilTs: number;
 
   if (mode === "range" && from && to) {
-    // 사용자 지정 모드: 선택한 기간을 "이번주"로 보고, 같은 길이의 이전 기간을 "지난주"로 설정
-    const fromDate = new Date(from + "T00:00:00+09:00");
-    const toDate = new Date(to + "T23:59:59.999+09:00");
-    const periodDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
+    // 사용자 지정 모드: 선택한 기간을 "이번주"로, 정확히 7일 전 주를 "지난주"로 설정
+    thisWeekStartUTC = new Date(from + "T00:00:00+09:00");
+    thisWeekEnd = new Date(to + "T23:59:59.999+09:00");
     
-    thisWeekStartUTC = fromDate;
-    thisWeekEnd = toDate;
-    lastWeekStartUTC = new Date(fromDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-    lastWeekEnd = new Date(fromDate.getTime() - 1);
+    // 지난주: 선택한 시작일로부터 정확히 7일 전 시작하는 주간
+    lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
+    lastWeekEnd = new Date(lastWeekStartUTC.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
     
     // 더 넓은 범위로 데이터 수집 (지난주 포함)
     sinceTs = lastWeekStartUTC.getTime();
@@ -305,7 +303,7 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  const cacheKey = `v18-custom-date-fix-${Date.now()}`;
+  const cacheKey = `v19-weekly-comparison-fix-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
