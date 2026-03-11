@@ -271,23 +271,41 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  const now = new Date();
-  const thisWeekStartUTC = getWeekStartKST(now);
-  const lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
-
+  let thisWeekStartUTC: Date;
+  let lastWeekStartUTC: Date;
+  let thisWeekEnd: Date;
+  let lastWeekEnd: Date;
   let sinceTs: number;
   let untilTs: number;
 
   if (mode === "range" && from && to) {
-    sinceTs = new Date(from + "T00:00:00+09:00").getTime();
-    untilTs = new Date(to + "T23:59:59.999+09:00").getTime();
+    // 사용자 지정 모드: 선택한 기간을 "이번주"로 보고, 같은 길이의 이전 기간을 "지난주"로 설정
+    const fromDate = new Date(from + "T00:00:00+09:00");
+    const toDate = new Date(to + "T23:59:59.999+09:00");
+    const periodDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
+    
+    thisWeekStartUTC = fromDate;
+    thisWeekEnd = toDate;
+    lastWeekStartUTC = new Date(fromDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    lastWeekEnd = new Date(fromDate.getTime() - 1);
+    
+    // 더 넓은 범위로 데이터 수집 (지난주 포함)
+    sinceTs = lastWeekStartUTC.getTime();
+    untilTs = thisWeekEnd.getTime();
   } else {
+    // 기본 모드: 수-화 주간 기준
+    const now = new Date();
+    thisWeekStartUTC = getWeekStartKST(now);
+    lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
+    thisWeekEnd = new Date(thisWeekStartUTC.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+    lastWeekEnd = new Date(thisWeekStartUTC.getTime() - 1);
+    
     // 모든 데이터 가져오기 (API에 날짜 필터 없음)
-    sinceTs = 0; // 필터링 제거
-    untilTs = Date.now() + 24 * 60 * 60 * 1000; // 미래 시점
+    sinceTs = 0;
+    untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  const cacheKey = `v17-timeout-fix-${Date.now()}`;
+  const cacheKey = `v18-custom-date-fix-${Date.now()}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return NextResponse.json(cached.data);
@@ -309,9 +327,7 @@ export async function GET(request: NextRequest) {
       return ts >= sinceTs && ts <= untilTs;
     });
 
-    const thisWeekEnd = getWeekEndKST(thisWeekStartUTC);
-    const lastWeekEnd = getWeekEndKST(lastWeekStartUTC);
-
+    // 이미 설정된 기간 사용 (사용자 지정 또는 기본 주간)
     const thisWeekChats = allChats.filter((c) => {
       const ts = c.createdAt || c.openedAt || 0; // createdAt 기준 (상담 인입)
       return ts >= thisWeekStartUTC.getTime() && ts <= thisWeekEnd.getTime();

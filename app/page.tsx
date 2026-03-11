@@ -238,8 +238,8 @@ export default function Dashboard() {
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                         labelStyle={{ color: '#f3f4f6' }}
                       />
-                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="이번주" fill="#10b981" name="이번주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="지난주" fill="#6b7280" name={dateMode === "custom" ? "이전 기간" : "지난주"} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#10b981" name={dateMode === "custom" ? "선택 기간" : "이번주"} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -270,8 +270,8 @@ export default function Dashboard() {
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                         labelStyle={{ color: '#f3f4f6' }}
                       />
-                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="이번주" fill="#3b82f6" name="이번주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="지난주" fill="#6b7280" name={dateMode === "custom" ? "이전 기간" : "지난주"} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#3b82f6" name={dateMode === "custom" ? "선택 기간" : "이번주"} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -300,7 +300,9 @@ export default function Dashboard() {
                 
                 {/* 지난주 파이차트 */}
                 <div>
-                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">지난주 ({totalLastWeek.toLocaleString()}건)</h4>
+                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">
+                    {dateMode === "custom" ? "이전 기간" : "지난주"} ({totalLastWeek.toLocaleString()}건)
+                  </h4>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -324,7 +326,9 @@ export default function Dashboard() {
 
                 {/* 이번주 파이차트 */}
                 <div>
-                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">이번주 ({totalThisWeek.toLocaleString()}건)</h4>
+                  <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">
+                    {dateMode === "custom" ? "선택 기간" : "이번주"} ({totalThisWeek.toLocaleString()}건)
+                  </h4>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -351,7 +355,7 @@ export default function Dashboard() {
               {/* AI 비중 요약 */}
               <div className="mt-6 grid grid-cols-2 gap-4 text-center">
                 <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-gray-400 text-sm">지난주 AI 처리율</p>
+                  <p className="text-gray-400 text-sm">{dateMode === "custom" ? "이전 기간" : "지난주"} AI 처리율</p>
                   <p className="text-2xl font-bold text-indigo-400">
                     {totalLastWeek > 0 ? Math.round(((data.cared.lastWeek.ai + data.market.lastWeek.ai) / totalLastWeek) * 100) : 0}%
                   </p>
@@ -360,7 +364,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-gray-400 text-sm">이번주 AI 처리율</p>
+                  <p className="text-gray-400 text-sm">{dateMode === "custom" ? "선택 기간" : "이번주"} AI 처리율</p>
                   <p className="text-2xl font-bold text-indigo-400">{totalAiRatio}%</p>
                   <p className="text-sm text-gray-500">
                     {totalAiThisWeek.toLocaleString()}건 자동처리
