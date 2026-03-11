@@ -310,12 +310,12 @@ export async function GET(request: NextRequest) {
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  // 고정 기간 모드
-  const cacheKey = `v25-fixed-period-${Date.now()}`;
-  // const cached = cache.get(cacheKey);
-  // if (cached && cached.expires > Date.now()) {
-  //   return NextResponse.json(cached.data);
-  // }
+  // 실시간 일별 데이터 (30분 캐시)
+  const cacheKey = `v26-realtime-daily`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return NextResponse.json(cached.data);
+  }
 
   try {
     // 사용자 지정 모드에서는 더 많은 페이지 필요 (특정 기간 데이터 확보)
@@ -410,6 +410,41 @@ export async function GET(request: NextRequest) {
     const caredAnalysis = analyzeNewSegment(thisWeekChats, lastWeekChats, "케어드");
     const marketAnalysis = analyzeNewSegment(thisWeekChats, lastWeekChats, "마켓");
 
+    // 어제/오늘 데이터 계산 (KST 기준)
+    const now = new Date();
+    const today = toKSTDateStr(now);
+    const yesterday = toKSTDateStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    
+    const todayChats = allChats.filter((c) => {
+      const ts = c.createdAt || c.openedAt || 0;
+      const chatKST = toKSTDateStr(new Date(ts));
+      return chatKST === today;
+    });
+    
+    const yesterdayChats = allChats.filter((c) => {
+      const ts = c.createdAt || c.openedAt || 0;
+      const chatKST = toKSTDateStr(new Date(ts));
+      return chatKST === yesterday;
+    });
+
+    // 일별 분석
+    const dailyAnalysis = {
+      today: {
+        total: todayChats.length,
+        ai: todayChats.filter(c => isAiChat(c)).length,
+        cared: todayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "케어드")).length,
+        market: todayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "마켓")).length,
+        date: today
+      },
+      yesterday: {
+        total: yesterdayChats.length,
+        ai: yesterdayChats.filter(c => isAiChat(c)).length,
+        cared: yesterdayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "케어드")).length,
+        market: yesterdayChats.filter(c => (c.tags || []).some(tag => classifyTag(tag)?.segment === "마켓")).length,
+        date: yesterday
+      }
+    };
+
     const result = {
       mode,
       totalFetched: allChats.length,
@@ -422,6 +457,7 @@ export async function GET(request: NextRequest) {
       },
       cared: caredAnalysis,
       market: marketAnalysis,
+      daily: dailyAnalysis,
       period: mode === "range" && from && to ? {
         thisWeek: { from: from, to: to },
         lastWeek: { 
@@ -449,7 +485,7 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
+    cache.set(cacheKey, { data: result, expires: Date.now() + CACHE_TTL });
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Error:", error);

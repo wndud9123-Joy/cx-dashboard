@@ -38,6 +38,10 @@ interface ApiData {
     thisWeek: { from: string; to: string };
     lastWeek: { from: string; to: string };
   };
+  daily?: {
+    today: { total: number; ai: number; cared: number; market: number; date: string };
+    yesterday: { total: number; ai: number; cared: number; market: number; date: string };
+  };
 }
 
 export default function Dashboard() {
@@ -373,7 +377,7 @@ export default function Dashboard() {
 
         {/* 일별 추이 탭 */}
         {activeTab === "daily" && (
-          <DailyAnalysisTab />
+          <DailyAnalysisTab data={data} />
         )}
       </main>
     </div>
@@ -543,24 +547,40 @@ function TagAnalysisTab({ title, data, color }: {
 }
 
 // 일별 분석 탭 컴포넌트  
-function DailyAnalysisTab() {
-  // 오늘/어제 샘플 데이터
-  const dailyData = [
+function DailyAnalysisTab({ data }: { data: ApiData }) {
+  if (!data.daily) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold mb-6">📈 일별 상담 인입 추이</h2>
+        <div className="text-center py-20">
+          <p className="text-gray-400">일별 데이터 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { today, yesterday } = data.daily;
+  const totalChange = yesterday.total > 0 ? Math.round(((today.total - yesterday.total) / yesterday.total) * 100) : 0;
+  const totalChangeAbs = today.total - yesterday.total;
+  const todayAiRatio = today.total > 0 ? Math.round((today.ai / today.total) * 100) : 0;
+
+  // 차트용 데이터
+  const chartData = [
     {
-      date: "어제 (3/10)",
-      total: 156,
-      ai: 89,
-      human: 67,
-      cared: 134,
-      market: 22
+      date: `어제 (${yesterday.date})`,
+      total: yesterday.total,
+      ai: yesterday.ai,
+      human: yesterday.total - yesterday.ai,
+      cared: yesterday.cared,
+      market: yesterday.market
     },
     {
-      date: "오늘 (3/11)",
-      total: 203,
-      ai: 97,
-      human: 106,
-      cared: 178,
-      market: 25
+      date: `오늘 (${today.date})`,
+      total: today.total,
+      ai: today.ai,
+      human: today.total - today.ai,
+      cared: today.cared,
+      market: today.market
     }
   ];
 
@@ -572,26 +592,26 @@ function DailyAnalysisTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
           label="오늘 총 문의"
-          value={203}
+          value={today.total}
           color="text-blue-400"
-          sub="어제 대비 +30%"
+          sub={`어제 대비 ${totalChange >= 0 ? '+' : ''}${totalChange}%`}
         />
         <StatCard
           label="어제 총 문의"
-          value={156}
+          value={yesterday.total}
           color="text-gray-400"
         />
         <StatCard
           label="오늘 AI 처리"
-          value="48%"
-          sub="97건 자동 처리"
+          value={`${todayAiRatio}%`}
+          sub={`${today.ai}건 자동 처리`}
           color="text-indigo-400"
         />
         <StatCard
           label="증감 추세"
-          value="+47건"
-          sub="↑ 30% 증가"
-          color="text-green-400"
+          value={`${totalChangeAbs >= 0 ? '+' : ''}${totalChangeAbs}건`}
+          sub={`${totalChange >= 0 ? '↑' : '↓'} ${Math.abs(totalChange)}% ${totalChange >= 0 ? '증가' : '감소'}`}
+          color={totalChange >= 0 ? "text-green-400" : "text-red-400"}
         />
       </div>
 
@@ -600,7 +620,7 @@ function DailyAnalysisTab() {
         <h3 className="text-lg font-semibold mb-4">어제 vs 오늘 비교</h3>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="date" stroke="#9ca3af" />
               <YAxis stroke="#9ca3af" />
@@ -623,15 +643,18 @@ function DailyAnalysisTab() {
           <div className="space-y-3">
             <div className="flex justify-between">
               <span>어제</span>
-              <span className="font-bold">134건</span>
+              <span className="font-bold">{yesterday.cared}건</span>
             </div>
             <div className="flex justify-between">
               <span>오늘</span>
-              <span className="font-bold text-blue-400">178건</span>
+              <span className="font-bold text-blue-400">{today.cared}건</span>
             </div>
             <div className="flex justify-between border-t border-gray-700 pt-3">
               <span>증감</span>
-              <span className="font-bold text-green-400">+44건 (+33%)</span>
+              <span className={`font-bold ${(today.cared - yesterday.cared) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {(today.cared - yesterday.cared) >= 0 ? '+' : ''}{today.cared - yesterday.cared}건 
+                ({yesterday.cared > 0 ? `${(today.cared - yesterday.cared) >= 0 ? '+' : ''}${Math.round(((today.cared - yesterday.cared) / yesterday.cared) * 100)}%` : 'N/A'})
+              </span>
             </div>
           </div>
         </div>
@@ -641,15 +664,18 @@ function DailyAnalysisTab() {
           <div className="space-y-3">
             <div className="flex justify-between">
               <span>어제</span>
-              <span className="font-bold">22건</span>
+              <span className="font-bold">{yesterday.market}건</span>
             </div>
             <div className="flex justify-between">
               <span>오늘</span>
-              <span className="font-bold text-purple-400">25건</span>
+              <span className="font-bold text-purple-400">{today.market}건</span>
             </div>
             <div className="flex justify-between border-t border-gray-700 pt-3">
               <span>증감</span>
-              <span className="font-bold text-green-400">+3건 (+14%)</span>
+              <span className={`font-bold ${(today.market - yesterday.market) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {(today.market - yesterday.market) >= 0 ? '+' : ''}{today.market - yesterday.market}건 
+                ({yesterday.market > 0 ? `${(today.market - yesterday.market) >= 0 ? '+' : ''}${Math.round(((today.market - yesterday.market) / yesterday.market) * 100)}%` : 'N/A'})
+              </span>
             </div>
           </div>
         </div>
