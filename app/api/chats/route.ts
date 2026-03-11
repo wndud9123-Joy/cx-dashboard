@@ -272,6 +272,18 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get("to");
   
   console.log("[DEBUG] API params:", { mode, from, to });
+  
+  // 사용자 지정 모드에서 즉시 반환 (테스트용)
+  if (mode === "range" && from && to) {
+    return NextResponse.json({
+      mode: "range",
+      period: {
+        thisWeek: { from: from, to: to },
+        lastWeek: { from: "TEST", to: "TEST" }
+      },
+      message: "사용자 지정 모드 테스트"
+    });
+  }
 
   let thisWeekStartUTC: Date;
   let lastWeekStartUTC: Date;
