@@ -6,7 +6,7 @@ const API_SECRET = process.env.CHANNEL_TALK_API_SECRET!;
 const BASE_URL = "https://api.channel.io/open/v5";
 
 const cache = new Map<string, { data: any; expires: number }>();
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 0;  // 완전 실시간 (캐시 없음)
 const KST_OFFSET = 9 * 60 * 60 * 1000;
 
 async function fetchChatsByState(state: string, sinceTs: number, maxPages = 30): Promise<any[]> {
