@@ -299,20 +299,19 @@ export async function GET(request: NextRequest) {
     sinceTs = lastWeekStartUTC.getTime();
     untilTs = thisWeekEnd.getTime();
   } else {
-    // 기본 모드: 수-화 주간 기준
-    const now = new Date();
-    thisWeekStartUTC = getWeekStartKST(now);
-    lastWeekStartUTC = new Date(thisWeekStartUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
-    thisWeekEnd = new Date(thisWeekStartUTC.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
-    lastWeekEnd = new Date(thisWeekStartUTC.getTime() - 1);
+    // 고정 기간 모드: 지난주(2/25~3/3) vs 이번주(3/4~3/10)
+    thisWeekStartUTC = new Date("2026-03-04T00:00:00+09:00");
+    thisWeekEnd = new Date("2026-03-10T23:59:59+09:00");
+    lastWeekStartUTC = new Date("2026-02-25T00:00:00+09:00");
+    lastWeekEnd = new Date("2026-03-03T23:59:59+09:00");
     
     // 모든 데이터 가져오기 (API에 날짜 필터 없음)
     sinceTs = 0;
     untilTs = Date.now() + 24 * 60 * 60 * 1000;
   }
 
-  // 타임존 문제 해결
-  const cacheKey = `v23-timezone-fix-${Date.now()}`;
+  // 고정 기간 모드
+  const cacheKey = `v25-fixed-period-${Date.now()}`;
   // const cached = cache.get(cacheKey);
   // if (cached && cached.expires > Date.now()) {
   //   return NextResponse.json(cached.data);

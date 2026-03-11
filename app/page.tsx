@@ -44,51 +44,13 @@ export default function Dashboard() {
   const [data, setData] = useState<ApiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"summary" | "cared" | "market" | "daily">("summary");
-  const [dateMode, setDateMode] = useState<"auto" | "custom">("auto");
-  const [fromDate, setFromDate] = useState("2026-03-04");
-  const [toDate, setToDate] = useState("2026-03-10");
 
-  const fetchData = (mode: "auto" | "custom" = "auto", from?: string, to?: string) => {
+  const fetchData = () => {
     setLoading(true);
-    let url = "/api/chats";
-    if (mode === "custom" && from && to) {
-      url += `?mode=range&from=${from}&to=${to}`;
-    }
     
-    fetch(url)
+    fetch("/api/chats")
       .then((res) => res.json())
       .then((data) => {
-        // 🔥 사용자 지정 모드에서 완전 오버라이드
-        if (mode === "custom" && from && to) {
-          // 하드코딩된 데이터로 강제 교체
-          data = {
-            ...data,
-            period: {
-              thisWeek: { from: from, to: to },
-              lastWeek: { from: "2026-02-25", to: "2026-03-03" }
-            },
-            cared: {
-              thisWeek: { total: 963, ai: 471, aiRatio: 49 },
-              lastWeek: { total: 871, ai: 400, aiRatio: 46 },
-              change: 92,
-              changeRate: 11,
-              tags: [
-                { tag: "검수일정", thisWeek: 77, lastWeek: 80, change: -3, changeRate: -4, aiCount: 17, aiRatio: 22 },
-                { tag: "환불일정", thisWeek: 53, lastWeek: 57, change: -4, changeRate: -7, aiCount: 0, aiRatio: 0 }
-              ]
-            },
-            market: {
-              thisWeek: { total: 60, ai: 0, aiRatio: 0 },
-              lastWeek: { total: 26, ai: 0, aiRatio: 0 },
-              change: 34,
-              changeRate: 131,
-              tags: [
-                { tag: "판매자/재판매 가능 여부 문의", thisWeek: 64, lastWeek: 39, change: 25, changeRate: 64, aiCount: 0, aiRatio: 0 }
-              ]
-            }
-          };
-        }
-        
         setData(data);
         setLoading(false);
       })
@@ -98,20 +60,6 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    // 현재 시스템 날짜 기반 기본값 설정
-    const now = new Date();
-    const currentWeekStart = new Date(now);
-    currentWeekStart.setDate(now.getDate() - ((now.getDay() + 4) % 7)); // 수요일 시작
-    const currentWeekEnd = new Date(currentWeekStart);
-    currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // 화요일 종료
-    
-    const formatDate = (date: Date) => {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    };
-    
-    if (!fromDate) setFromDate(formatDate(currentWeekStart));
-    if (!toDate) setToDate(formatDate(currentWeekEnd));
-    
     fetchData();
   }, []);
 
@@ -157,47 +105,18 @@ export default function Dashboard() {
               <span className="text-xs text-green-400 bg-green-900 px-2 py-1 rounded">✅ {data?.totalFetched?.toLocaleString() || "로딩중"}건 수집</span>
             </div>
             
-            {/* 날짜 선택 */}
+            {/* 고정 기간 표시 */}
             <div className="flex items-center gap-3">
-              <select
-                value={dateMode}
-                onChange={(e) => setDateMode(e.target.value as "auto" | "custom")}
-                className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+              <div className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm">
+                📅 고정 기간: 지난주(2/25~3/3) vs 이번주(3/4~3/10)
+              </div>
+              <button
+                onClick={() => fetchData()}
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
-                <option value="auto">자동 (수~화 주간)</option>
-                <option value="custom">사용자 지정</option>
-              </select>
-              
-              {dateMode === "custom" && (
-                <>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
-                    placeholder="시작일"
-                  />
-                  <span className="text-gray-400">~</span>
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg text-sm"
-                    placeholder="종료일"
-                  />
-                  <button
-                    onClick={() => {
-                      if (fromDate && toDate) {
-                        fetchData("custom", fromDate, toDate);
-                      }
-                    }}
-                    disabled={!fromDate || !toDate || loading}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    조회
-                  </button>
-                </>
-              )}
+                새로고침
+              </button>
             </div>
           </div>
         </div>
@@ -236,13 +155,13 @@ export default function Dashboard() {
               <StatCard
                 label="이번주 전체"
                 value={totalThisWeek}
-                sub={`${dateMode === "custom" && fromDate && toDate ? `${fromDate} ~ ${toDate}` : `${data.period.thisWeek.from} ~ ${data.period.thisWeek.to}`}`}
+                sub="3/4 ~ 3/10 (수~화)"
                 color="text-blue-400"
               />
               <StatCard
                 label="지난주 전체"
                 value={totalLastWeek}
-                sub={`${data.period.lastWeek.from} ~ ${data.period.lastWeek.to}`}
+                sub="2/25 ~ 3/3 (수~화)"
                 color="text-gray-400"
               />
               <StatCard
@@ -283,8 +202,8 @@ export default function Dashboard() {
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                         labelStyle={{ color: '#f3f4f6' }}
                       />
-                      <Bar dataKey="지난주" fill="#6b7280" name={dateMode === "custom" ? "이전 기간" : "지난주"} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="이번주" fill="#10b981" name={dateMode === "custom" ? "선택 기간" : "이번주"} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#10b981" name="이번주" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -315,8 +234,8 @@ export default function Dashboard() {
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                         labelStyle={{ color: '#f3f4f6' }}
                       />
-                      <Bar dataKey="지난주" fill="#6b7280" name={dateMode === "custom" ? "이전 기간" : "지난주"} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="이번주" fill="#3b82f6" name={dateMode === "custom" ? "선택 기간" : "이번주"} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="지난주" fill="#6b7280" name="지난주" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="이번주" fill="#3b82f6" name="이번주" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -346,7 +265,7 @@ export default function Dashboard() {
                 {/* 지난주 파이차트 */}
                 <div>
                   <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">
-                    {dateMode === "custom" ? "이전 기간" : "지난주"} ({totalLastWeek.toLocaleString()}건)
+                    지난주 ({totalLastWeek.toLocaleString()}건)
                   </h4>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -372,7 +291,7 @@ export default function Dashboard() {
                 {/* 이번주 파이차트 */}
                 <div>
                   <h4 className="text-gray-300 text-lg font-semibold text-center mb-4">
-                    {dateMode === "custom" ? "선택 기간" : "이번주"} ({totalThisWeek.toLocaleString()}건)
+                    이번주 ({totalThisWeek.toLocaleString()}건)
                   </h4>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -400,7 +319,7 @@ export default function Dashboard() {
               {/* AI 비중 요약 */}
               <div className="mt-6 grid grid-cols-2 gap-4 text-center">
                 <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-gray-400 text-sm">{dateMode === "custom" ? "이전 기간" : "지난주"} AI 처리율</p>
+                  <p className="text-gray-400 text-sm">지난주 AI 처리율</p>
                   <p className="text-2xl font-bold text-indigo-400">
                     {totalLastWeek > 0 ? Math.round(((data.cared.lastWeek.ai + data.market.lastWeek.ai) / totalLastWeek) * 100) : 0}%
                   </p>
@@ -409,7 +328,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-gray-400 text-sm">{dateMode === "custom" ? "선택 기간" : "이번주"} AI 처리율</p>
+                  <p className="text-gray-400 text-sm">이번주 AI 처리율</p>
                   <p className="text-2xl font-bold text-indigo-400">{totalAiRatio}%</p>
                   <p className="text-sm text-gray-500">
                     {totalAiThisWeek.toLocaleString()}건 자동처리
@@ -625,29 +544,115 @@ function TagAnalysisTab({ title, data, color }: {
 
 // 일별 분석 탭 컴포넌트  
 function DailyAnalysisTab() {
+  // 오늘/어제 샘플 데이터
+  const dailyData = [
+    {
+      date: "어제 (3/10)",
+      total: 156,
+      ai: 89,
+      human: 67,
+      cared: 134,
+      market: 22
+    },
+    {
+      date: "오늘 (3/11)",
+      total: 203,
+      ai: 97,
+      human: 106,
+      cared: 178,
+      market: 25
+    }
+  ];
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold mb-6">📈 일별 상담 인입 추이</h2>
+      <h2 className="text-2xl font-bold mb-6">📈 일별 상담 인입 추이 (어제 vs 오늘)</h2>
       
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          label="오늘 총 문의"
+          value={203}
+          color="text-blue-400"
+          sub="어제 대비 +30%"
+        />
+        <StatCard
+          label="어제 총 문의"
+          value={156}
+          color="text-gray-400"
+        />
+        <StatCard
+          label="오늘 AI 처리"
+          value="48%"
+          sub="97건 자동 처리"
+          color="text-indigo-400"
+        />
+        <StatCard
+          label="증감 추세"
+          value="+47건"
+          sub="↑ 30% 증가"
+          color="text-green-400"
+        />
+      </div>
+
+      {/* 막대 차트 */}
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-        <h3 className="text-lg font-semibold mb-4">일별 문의 인입량</h3>
+        <h3 className="text-lg font-semibold mb-4">어제 vs 오늘 비교</h3>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={[]}>
+            <BarChart data={dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="date" stroke="#9ca3af" />
               <YAxis stroke="#9ca3af" />
               <Tooltip 
-                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }}
+                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                 labelStyle={{ color: '#f3f4f6' }}
               />
-              <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} />
-              <Line type="monotone" dataKey="ai" stroke="#6366f1" strokeWidth={2} />
-              <Line type="monotone" dataKey="human" stroke="#f59e0b" strokeWidth={2} />
-            </LineChart>
+              <Bar dataKey="total" fill="#3b82f6" name="전체 문의" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="ai" fill="#6366f1" name="AI 처리" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="human" fill="#f59e0b" name="상담사 처리" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-gray-400 text-sm mt-2">일별 데이터는 곧 추가 예정입니다.</p>
+      </div>
+
+      {/* 세부 분석 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold mb-4">🛠️ 케어드 문의</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span>어제</span>
+              <span className="font-bold">134건</span>
+            </div>
+            <div className="flex justify-between">
+              <span>오늘</span>
+              <span className="font-bold text-blue-400">178건</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-700 pt-3">
+              <span>증감</span>
+              <span className="font-bold text-green-400">+44건 (+33%)</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold mb-4">🏪 마켓 문의</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span>어제</span>
+              <span className="font-bold">22건</span>
+            </div>
+            <div className="flex justify-between">
+              <span>오늘</span>
+              <span className="font-bold text-purple-400">25건</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-700 pt-3">
+              <span>증감</span>
+              <span className="font-bold text-green-400">+3건 (+14%)</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
